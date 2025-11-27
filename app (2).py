@@ -1,12 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_httpauth import HTTPBasicAuth
 from datetime import timedelta
+from flask_httpauth import HTTPBasicAuth
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'EmmaLiam29!'  # Remplace par une clé secrète forte et unique
+app.secret_key = '03FredGendronCestLePlus1974'  # Remplace par une clé secrète forte et unique
 app.permanent_session_lifetime = timedelta(minutes=5)  # Durée de vie de la session
 
 auth = HTTPBasicAuth()
@@ -21,18 +21,17 @@ def verify_password(username, password):
     if username in users and check_password_hash(users[username], password):
         return username
 
- # Configuration de Flask-Login
+# Configuration de Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
- # Modèle utilisateur
+# Modèle utilisateur
 class User(UserMixin):
     def __init__(self, id, username, password):
         self.id = id
         self.username = username
         self.password = password
-
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -44,6 +43,9 @@ def load_user(user_id):
     if user_data:
         return User(user_data[0], user_data[1], user_data[2])
     return None
+
+
+# app = Flask(__name__)
 
 def get_ingredients(recette_id):
     conn = sqlite3.connect('recettes.db')
@@ -101,7 +103,8 @@ def login():
         user_data = cursor.fetchone()
         conn.close()
         if user_data and check_password_hash(user_data[2], password):
-           user = User(user_data[0], user_data[1], user_data[2])
+            user = User(user_data[0], user_data[1], user_data[2])
+            login_user(user) 
             return redirect(url_for('index'))
         flash('Nom d\'utilisateur ou mot de passe incorrect.')
     return render_template('login.html')
