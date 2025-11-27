@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Mes Recettes</h1>
+<style>
+    .categories-container {
+        display: flex; /* Utilisation de flexbox pour les colonnes */
+        flex-wrap: wrap; /* Permet aux colonnes de passer à la ligne si nécessaire */
+        gap: 20px; /* Espace entre les colonnes */
+        justify-content: space-between; /* Répartition uniforme des colonnes */
+    }
+
+    .category-column {
+        flex: 1; /* Chaque colonne prend une part égale de l'espace disponible */
+        min-width: 250px; /* Largeur minimale pour éviter que les colonnes soient trop étroites */
+        max-width: 300px; /* Largeur maximale pour éviter que les colonnes soient trop larges */
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 15px;
+        background-color: #f9f9f9;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .category-title {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+        font-size: 1.3em;
+        text-align: center;
+    }
+
+    .recettes-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .recette-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .recette-item:last-child {
+        border-bottom: none;
+    }
+
+    .recette-link {
+        text-decoration: none;
+        color: #3498db;
+        font-weight: 500;
+        display: block;
+        transition: color 0.2s;
+    }
+
+    .recette-link:hover {
+        color: #2980b9;
+        text-decoration: underline;
+    }
+</style>
+
+    <!-- Conteneur principal pour les colonnes de catégories -->
+    <div class="categories-container">
+        {% for categorie in categories %}
+            <div class="category-column">
+                <!-- Titre de la catégorie -->
+                <h2 class="category-title">{{ categorie }}</h2>
+
+                <!-- Liste des recettes de cette catégorie -->
+                <ul class="recettes-list">
+                    {% for recette in recettes_par_categorie[categorie] %}
+                        <li class="recette-item">
+                            <a href="{{ url_for('afficher_recette', recette_id=recette['id']) }}" class="recette-link">
+                                {{ recette['nom'] }}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}
+
+

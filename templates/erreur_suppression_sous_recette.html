@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Suppression impossible</h1>
+    <p>La sous-recette ne peut pas être supprimée car elle est utilisée par les recettes suivantes :</p>
+    <ul>
+        {% for recette in recettes %}
+            <li>{{ recette }}</li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('afficher_recette', recette_id=sous_recette_id) }}" style="padding: 10px 20px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 5px;">Retour à la sous-recette</a>
+{% endblock %}

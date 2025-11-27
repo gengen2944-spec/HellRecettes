@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Ajouter une Recette</h1>
+    <form method="POST" action="{{ url_for('ajouter_recette') }}">
+        <!-- Nom de la recette -->
+        <div>
+            <label for="nom">Nom de la recette :</label><br>
+            <input type="text" id="nom" name="nom" style="width: 40%; padding: 8px; margin-bottom: 10px;" required>
+        </div>
+
+        <!-- Description de la recette -->
+        <div>
+            <label for="description">Description :</label><br>
+            <textarea id="description" name="description" style="width: 60%; height: 100px; padding: 8px; margin-bottom: 10px;"></textarea>
+        </div>
+
+        <!-- Catégorie de la recette -->
+        <div>
+            <label for="categorie">Catégorie :</label><br>
+            <select id="categorie" name="categorie" style="width: 20%; padding: 8px; margin-bottom: 10px;">
+                <option value="A picorer">A picorer</option>
+                <option value="Entrées/plats">Entrées/plats</option>
+                <option value="Desserts">Desserts</option>
+                <option value="Sauce/Marinade/condiments">Sauce/Marinade/condiments</option>
+            </select>
+        </div>
+
+        <!-- Case à cocher pour les sous-recettes -->
+        <div>
+            <label>
+                <input type="checkbox" id="est_sous_recette" name="est_sous_recette" style="margin-right: 10px;">
+                C'est une sous-recette
+            </label>
+        </div>
+
+        <!-- Section pour les ingrédients -->
+        <h2>Ingrédients</h2>
+        <div id="ingredients">
+            <!-- Les ingrédients seront ajoutés ici -->
+        </div>
+
+        <!-- Bouton pour ajouter un ingrédient -->
+        <button type="button" onclick="ajouterIngredient()" style="margin-top: 10px; margin-bottom: 20px; padding: 8px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+            Ajouter un ingrédient
+        </button>
+
+        <!-- Section pour les sous-recettes -->
+        <h2>Sous-recettes</h2>
+        <div id="sous-recettes">
+            <!-- Les sous-recettes seront ajoutées ici -->
+        </div>
+
+        <!-- Bouton pour ajouter une sous-recette -->
+        <button type="button" onclick="afficherListeSousRecettes()" style="margin-top: 10px; margin-bottom: 20px; padding: 8px 15px; background-color: #FF9800; color: white; border: none; cursor: pointer;">
+            Ajouter une sous-recette
+        </button>
+
+        <!-- Liste déroulante pour sélectionner une sous-recette -->
+        {% if sous_recettes %}
+            <select id="sous-recette-select" style="display: none; margin-bottom: 10px; padding: 8px; width: 100%;">
+        {% for sous_recette in sous_recettes %}
+            <option value="{{ sous_recette['id'] }}">{{ sous_recette['nom'] }}</option>
+        {% endfor %}
+    </select>
+    <button type="button" id="valider-sous-recette" onclick="ajouterSousRecette()" style="display: none; margin-bottom: 20px; padding: 8px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+        Valider
+    </button>
+{% else %}
+    <p>Aucune sous-recette disponible. <a href="{{ url_for('ajouter_recette') }}">Ajoute une sous-recette</a> d'abord.</p>
+{% endif %}
+
+
+        <!-- Bouton pour soumettre le formulaire -->
+        <button type="submit" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+            Ajouter la recette
+        </button>
+    </form>
+
+    <!-- Script pour ajouter/supprimer dynamiquement des ingrédients et des sous-recettes -->
+    <script>
+        // Fonction pour ajouter un ingrédient
+        function ajouterIngredient() {
+            const div = document.createElement('div');
+            div.className = 'ingredient';
+            div.style.display = 'flex';
+            div.style.marginBottom = '10px';
+            div.style.alignItems = 'center';
+            div.innerHTML = `
+                <input type="text" name="ingredient_nom[]" placeholder="Nom" style="flex: 2; padding: 8px; margin-right: 10px;" required>
+                <input type="number" name="ingredient_quantite[]" placeholder="Quantité" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;" required>
+                <select name="ingredient_unite[]" style="flex: 1; padding: 8px; margin-right: 10px;">
+                    <option value="Kg">Kg</option>
+                    <option value="g">g</option>
+                    <option value="Pièce">Pièce</option>
+                    <option value="PM">PM</option>
+                </select>
+                <button type="button" onclick="supprimerIngredient(this)" style="padding: 8px; background-color: #f44336; color: white; border: none; cursor: pointer;">Supprimer</button>
+            `;
+            document.getElementById('ingredients').appendChild(div);
+        }
+
+        // Fonction pour supprimer un ingrédient
+        function supprimerIngredient(button) {
+            button.parentElement.remove();
+        }
+
+// Fonction pour afficher la liste des sous-recettes
+    function afficherListeSousRecettes() {
+        const select = document.getElementById('sous-recette-select');
+        const validerButton = document.getElementById('valider-sous-recette');
+        if (select) {
+            select.style.display = 'block';
+            validerButton.style.display = 'inline-block';
+        } else {
+            alert("Aucune sous-recette disponible.");
+        }
+    }
+
+    // Fonction pour ajouter une sous-recette
+    function ajouterSousRecette() {
+        const select = document.getElementById('sous-recette-select');
+        if (!select) {
+            alert("Aucune sous-recette disponible.");
+            return;
+        }
+        if (select.selectedIndex === -1) {
+            alert("Veuillez sélectionner une sous-recette.");
+            return;
+        }
+        const sousRecetteId = select.value;
+        const sousRecetteNom = select.options[select.selectedIndex].text;
+
+        const div = document.createElement('div');
+        div.className = 'sous-recette';
+        div.style.display = 'flex';
+        div.style.marginBottom = '10px';
+        div.style.alignItems = 'center';
+        div.style.backgroundColor = '#f9f9f9';
+        div.style.padding = '10px';
+        div.style.borderRadius = '5px';
+        div.innerHTML = `
+            <span style="flex: 1;">${sousRecetteNom}</span>
+            <input type="hidden" name="sous_recette_id[]" value="${sousRecetteId}">
+            <button type="button" onclick="supprimerSousRecette(this)" style="padding: 5px 10px; background-color: #f44336; color: white; border: none; cursor: pointer;">Supprimer</button>
+        `;
+        document.getElementById('sous-recettes').appendChild(div);
+
+        // Masquer la liste déroulante et le bouton Valider après ajout
+        select.style.display = 'none';
+        document.getElementById('valider-sous-recette').style.display = 'none';
+    }
+
+    // Fonction pour supprimer une sous-recette
+    function supprimerSousRecette(button) {
+        button.parentElement.remove();
+    }
+    </script>
+{% endblock %}

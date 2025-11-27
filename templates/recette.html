@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>{{ recette['nom'] }}</h1>
+
+    <div style="margin-bottom: 20px;">
+        <p><strong>Catégorie :</strong> {{ recette['categorie'] }}</p>
+        {% if recette['est_sous_recette'] %}
+            <p><strong>Type :</strong> Sous-recette</p>
+        {% endif %}
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <h2>Description</h2>
+        <p style="white-space: pre-line;">{{ recette['description'] }}</p>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <h2>Ingrédients</h2>
+        <ul>
+            {% for ingredient in ingredients %}
+                <li>{{ ingredient['quantite'] }} {{ ingredient['unite'] }} de {{ ingredient['nom'] }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {% if sous_recettes %}
+        <div style="margin-bottom: 20px;">
+            <h2>Sous-recettes utilisées</h2>
+            <ul>
+                {% for sous_recette in sous_recettes %}
+                    <li>
+                        <a href="{{ url_for('afficher_recette', recette_id=sous_recette['id']) }}">
+                            {{ sous_recette['nom'] }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <a href="{{ url_for('modifier_recette', recette_id=recette['id']) }}" style="padding: 10px 20px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 5px; text-align: center;">Modifier</a>
+
+        <form method="POST"
+              {% if recette['est_sous_recette'] %}
+                  action="{{ url_for('supprimer_sous_recette', sous_recette_id=recette['id']) }}"
+              {% else %}
+                  action="{{ url_for('supprimer_recette', recette_id=recette['id']) }}"
+              {% endif %}
+              style="margin: 0;">
+            <button type="submit" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;"
+                    onclick="return confirm('Êtes-vous sûr de vouloir supprimer {% if recette['est_sous_recette'] %}cette sous-recette{% else %}cette recette{% endif %} ?');">
+                Supprimer
+            </button>
+        </form>
+
+        <a href="{{ url_for('imprimer_recette', recette_id=recette['id']) }}" target="_blank" style="padding: 10px 20px; background-color: #FF5722; color: white; text-decoration: none; border-radius: 5px; text-align: center;">Imprimer</a>
+    </div>
+{% endblock %}
