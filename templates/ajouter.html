@@ -88,12 +88,14 @@
             div.style.alignItems = 'center';
             div.innerHTML = `
                 <input type="text" name="ingredient_nom[]" placeholder="Nom" style="flex: 2; padding: 8px; margin-right: 10px;" required>
-                <input type="number" name="ingredient_quantite[]" placeholder="Quantité" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;" required>
+                <input type="number" name="ingredient_quantite[]" placeholder="Quantité" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;">
                 <select name="ingredient_unite[]" style="flex: 1; padding: 8px; margin-right: 10px;">
-                    <option value="Kg">Kg</option>
                     <option value="g">g</option>
+                    <option value="Kg">Kg</option>
                     <option value="Pièce">Pièce</option>
                     <option value="PM">PM</option>
+                    <option value="L">L</option>
+                    <option value="cl">cl</option>
                 </select>
                 <button type="button" onclick="supprimerIngredient(this)" style="padding: 8px; background-color: #f44336; color: white; border: none; cursor: pointer;">Supprimer</button>
             `;

@@ -6,19 +6,19 @@
         <!-- Nom de la recette -->
         <div>
             <label for="nom">Nom de la recette :</label><br>
-            <input type="text" id="nom" name="nom" value="{{ recette['nom'] }}" style="width: 100%; padding: 8px; margin-bottom: 10px;" required>
+            <input type="text" id="nom" name="nom" value="{{ recette['nom'] }}" style="width: 30%; padding: 8px; margin-bottom: 10px;" required>
         </div>
 
         <!-- Description de la recette -->
         <div>
             <label for="description">Description :</label><br>
-            <textarea id="description" name="description" style="width: 100%; height: 100px; padding: 8px; margin-bottom: 10px;">{{ recette['description'] }}</textarea>
+            <textarea id="description" name="description" style="width: 50%; height: 100px; padding: 8px; margin-bottom: 10px;">{{ recette['description'] }}</textarea>
         </div>
 
         <!-- Catégorie de la recette -->
         <div>
             <label for="categorie">Catégorie :</label><br>
-            <select id="categorie" name="categorie" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <select id="categorie" name="categorie" style="width: 20%; padding: 8px; margin-bottom: 10px;">
                 <option value="A picorer" {% if recette['categorie'] == 'A picorer' %}selected{% endif %}>A picorer</option>
                 <option value="Entrées/plats" {% if recette['categorie'] == 'Entrées/plats' %}selected{% endif %}>Entrées/plats</option>
                 <option value="Desserts" {% if recette['categorie'] == 'Desserts' %}selected{% endif %}>Desserts</option>
@@ -39,13 +39,15 @@
         <div id="ingredients">
             {% for ingredient in ingredients %}
                 <div class="ingredient" style="display: flex; margin-bottom: 10px; align-items: center;">
-                    <input type="text" name="ingredient_nom[]" value="{{ ingredient['nom'] }}" style="flex: 2; padding: 8px; margin-right: 10px;" required>
-                    <input type="number" name="ingredient_quantite[]" value="{{ ingredient['quantite'] }}" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;" required>
+                    <input type="text" name="ingredient_nom[]" value="{{ ingredient['nom'] }}" style="flex: 4; padding: 8px; margin-right: 10px;" required>
+                    <input type="number" name="ingredient_quantite[]" value="{{ ingredient['quantite'] }}" step="0.01" style="flex: 2; padding: 8px; margin-right: 10px;">
                     <select name="ingredient_unite[]" style="flex: 1; padding: 8px; margin-right: 10px;">
-                        <option value="Kg" {% if ingredient['unite'] == 'Kg' %}selected{% endif %}>Kg</option>
                         <option value="g" {% if ingredient['unite'] == 'g' %}selected{% endif %}>g</option>
+                        <option value="Kg" {% if ingredient['unite'] == 'Kg' %}selected{% endif %}>Kg</option>
                         <option value="Pièce" {% if ingredient['unite'] == 'Pièce' %}selected{% endif %}>Pièce</option>
                         <option value="PM" {% if ingredient['unite'] == 'PM' %}selected{% endif %}>PM</option>
+                        <option value="L" {% if ingredient['unite'] == 'L' %}selected{% endif %}>L</option>
+                        <option value="cl" {% if ingredient['unite'] == 'cl' %}selected{% endif %}>cl</option>
                     </select>
                     <button type="button" onclick="supprimerIngredient(this)" style="padding: 8px; background-color: #f44336; color: white; border: none; cursor: pointer;">Supprimer</button>
                 </div>
@@ -106,12 +108,14 @@
             div.style.alignItems = 'center';
             div.innerHTML = `
                 <input type="text" name="ingredient_nom[]" placeholder="Nom" style="flex: 2; padding: 8px; margin-right: 10px;" required>
-                <input type="number" name="ingredient_quantite[]" placeholder="Quantité" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;" required>
+                <input type="number" name="ingredient_quantite[]" placeholder="Quantité" step="0.01" style="flex: 1; padding: 8px; margin-right: 10px;">
                 <select name="ingredient_unite[]" style="flex: 1; padding: 8px; margin-right: 10px;">
                     <option value="Kg">Kg</option>
                     <option value="g">g</option>
                     <option value="Pièce">Pièce</option>
                     <option value="PM">PM</option>
+                    <option value="L">L</option>
+                    <option value="cl">cl</option>
                 </select>
                 <button type="button" onclick="supprimerIngredient(this)" style="padding: 8px; background-color: #f44336; color: white; border: none; cursor: pointer;">Supprimer</button>
             `;
