@@ -9,7 +9,7 @@ import sqlite3
 
 # Fonction pour restaurer la base de données depuis GitHub
 def restaurer_bdd_depuis_github():
-    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://github.com/ton-utilisateur/gengen-recettes-data.git')
+    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://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@github.com/gengen2944-spec/gengen-recettes-data.git')
     repo_dir = "/tmp/gengen-recettes-data"
     try:
         if not os.path.exists(repo_dir):
@@ -25,7 +25,7 @@ def restaurer_bdd_depuis_github():
 
 # Fonction pour sauvegarder la base de données vers GitHub
 def sauvegarder_bdd_vers_github():
-    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://github.com/ton-utilisateur/gengen-recettes-data.git')
+    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://github.com/gengen2944-spec/gengen-recettes-data.git')
     repo_dir = "/tmp/gengen-recettes-data"
     try:
         if not os.path.exists(repo_dir):
@@ -267,9 +267,8 @@ def ajouter_recette():
             ) 
         conn.commit()
         conn.close()
-sauvegarder_bdd_vers_github()
-        return redirect(url_for('index'))
-
+    sauvegarder_bdd_vers_github()
+    return redirect(url_for('index'))
     return render_template('ajouter.html', sous_recettes=sous_recettes)
     
 from flask import send_file
@@ -327,7 +326,7 @@ def modifier_recette(recette_id):
 
         conn.commit()
         conn.close()
-sauvegarder_bdd_vers_github()
+        sauvegarder_bdd_vers_github()
         return redirect(url_for('afficher_recette', recette_id=recette_id))
 
     # Récupérer les données de la recette et des ingrédients
@@ -339,7 +338,7 @@ sauvegarder_bdd_vers_github()
     cursor.execute('SELECT * FROM Ingredients WHERE id_recette = ?', (recette_id,))
     ingredients = cursor.fetchall()
     conn.close()
-sauvegarder_bdd_vers_github()
+    sauvegarder_bdd_vers_github()
     return render_template('modifier_recette.html', recette=recette, ingredients=ingredients, sous_recettes=sous_recettes, sous_recettes_utilisees=sous_recettes_utilisees)
 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -460,7 +459,7 @@ def supprimer_recette(recette_id):
 
     conn.commit()
     conn.close()
-sauvegarder_bdd_vers_github()
+    sauvegarder_bdd_vers_github()
     return redirect(url_for('index'))
 
 
@@ -480,7 +479,7 @@ def supprimer_sous_recette(sous_recette_id):
     cursor.execute('DELETE FROM Recettes WHERE id = ?', (sous_recette_id,))
     conn.commit()
     conn.close()
-sauvegarder_bdd_vers_github()
+    sauvegarder_bdd_vers_github()
     return redirect(url_for('index'))
 
 @app.route('/recherche')
