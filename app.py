@@ -1,3 +1,58 @@
+import os
+from git import Repo
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import timedelta
+from flask_httpauth import HTTPBasicAuth
+import sqlite3
+
+# Fonction pour restaurer la base de données depuis GitHub
+def restaurer_bdd_depuis_github():
+    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://github.com/ton-utilisateur/gengen-recettes-data.git')
+    repo_dir = "/tmp/gengen-recettes-data"
+    try:
+        if not os.path.exists(repo_dir):
+            print("Clonage du dépôt des données...")
+            Repo.clone_from(repo_url, repo_dir)
+        if os.path.exists(f"{repo_dir}/recettes.db"):
+            print("Restauration de recettes.db...")
+            os.replace(f"{repo_dir}/recettes.db", "recettes.db")
+        else:
+            print("Aucun fichier recettes.db trouvé dans le dépôt des données.")
+    except Exception as e:
+        print(f"Erreur lors de la restauration de la base de données : {e}")
+
+# Fonction pour sauvegarder la base de données vers GitHub
+def sauvegarder_bdd_vers_github():
+    repo_url = os.getenv('GITHUB_DATA_REPO_URL', 'https://github.com/ton-utilisateur/gengen-recettes-data.git')
+    repo_dir = "/tmp/gengen-recettes-data"
+    try:
+        if not os.path.exists(repo_dir):
+            print("Clonage du dépôt des données...")
+            Repo.clone_from(repo_url, repo_dir)
+        if os.path.exists("recettes.db"):
+            print("Sauvegarde de recettes.db vers GitHub...")
+            os.replace("recettes.db", f"{repo_dir}/recettes.db")
+            repo = Repo(repo_dir)
+            repo.git.add("recettes.db")
+            repo.index.commit("Mise à jour automatique de la base de données")
+            origin = repo.remote(name="origin")
+            origin.push()
+        else:
+            print("Le fichier recettes.db n'existe pas localement.")
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde de la base de données : {e}")
+
+# Initialisation de l'application Flask
+app = Flask(__name__)
+app.secret_key = '03FredGendronCestLePlus1974'  # Remplace par une clé secrète forte et unique
+app.permanent_session_lifetime = timedelta(minutes=5)  # Durée de vie de la session
+
+# Appelle la fonction de restauration au démarrage
+restaurer_bdd_depuis_github()
+
+# --- Le reste de ton code existant ---
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -212,7 +267,7 @@ def ajouter_recette():
             ) 
         conn.commit()
         conn.close()
-
+sauvegarder_bdd_vers_github()
         return redirect(url_for('index'))
 
     return render_template('ajouter.html', sous_recettes=sous_recettes)
@@ -272,6 +327,7 @@ def modifier_recette(recette_id):
 
         conn.commit()
         conn.close()
+sauvegarder_bdd_vers_github()
         return redirect(url_for('afficher_recette', recette_id=recette_id))
 
     # Récupérer les données de la recette et des ingrédients
@@ -283,6 +339,7 @@ def modifier_recette(recette_id):
     cursor.execute('SELECT * FROM Ingredients WHERE id_recette = ?', (recette_id,))
     ingredients = cursor.fetchall()
     conn.close()
+sauvegarder_bdd_vers_github()
     return render_template('modifier_recette.html', recette=recette, ingredients=ingredients, sous_recettes=sous_recettes, sous_recettes_utilisees=sous_recettes_utilisees)
 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -403,7 +460,7 @@ def supprimer_recette(recette_id):
 
     conn.commit()
     conn.close()
-
+sauvegarder_bdd_vers_github()
     return redirect(url_for('index'))
 
 
@@ -423,7 +480,7 @@ def supprimer_sous_recette(sous_recette_id):
     cursor.execute('DELETE FROM Recettes WHERE id = ?', (sous_recette_id,))
     conn.commit()
     conn.close()
-
+sauvegarder_bdd_vers_github()
     return redirect(url_for('index'))
 
 @app.route('/recherche')
