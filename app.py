@@ -78,7 +78,7 @@ def get_sous_recettes_utilisees(recette_id):
 # --- ROUTES ---
 
 @app.route('/')
-@login_required # La porte d'entrée du site
+#@login_required # La porte d'entrée du site
 def index():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
