@@ -6,17 +6,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from io import BytesIO
-from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib import colors
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
-app.permanent_session_lifetime = timedelta(minutes=60)
+# Session longue de 30 jours pour plus de confort
+app.permanent_session_lifetime = timedelta(days=30) 
 
 # Correction de l'URL pour Render/PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -77,25 +75,10 @@ def get_sous_recettes_utilisees(recette_id):
                            WHERE s.id_recette = %s''', (recette_id,))
             return cur.fetchall()
 
-def est_sous_recette_utilisee(sous_recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('''SELECT r.id, r.nom FROM Recettes r
-                           JOIN SousRecettesUtilisees s ON r.id = s.id_recette
-                           WHERE s.id_sous_recette = %s''', (sous_recette_id,))
-            return cur.fetchall()
-
 # --- ROUTES ---
-@app.route('/reset_admin')
-def reset_admin():
-    new_pass = generate_password_hash('MON_NOUVEAU_MOT_DE_PASSE')
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE users SET password = %s WHERE username = 'admin'", (new_pass,))
-        conn.commit()
-    return "Mot de passe réinitialisé pour l'utilisateur admin !"
 
 @app.route('/')
+@login_required # La porte d'entrée du site
 def index():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -119,9 +102,10 @@ def login():
                 cur.execute('SELECT * FROM users WHERE username = %s', (username,))
                 user_data = cur.fetchone()
         if user_data and check_password_hash(user_data['password'], password):
-            login_user(User(user_data['id'], user_data['username'], user_data['password']))
+            user = User(user_data['id'], user_data['username'], user_data['password'])
+            login_user(user, remember=True) # "Remember me" activé par défaut
             return redirect(url_for('index'))
-        flash('Nom d\'utilisateur ou mot de passe incorrect.')
+        flash('Identifiants incorrects.')
     return render_template('login.html')
 
 @app.route('/recette/<int:recette_id>')
@@ -135,7 +119,6 @@ def afficher_recette(recette_id):
                            sous_recettes=get_sous_recettes_utilisees(recette_id))
 
 @app.route('/ajout', methods=['GET', 'POST'])
-@login_required
 def ajouter_recette():
     if request.method == 'POST':
         est_sous = 'est_sous_recette' in request.form
@@ -145,10 +128,8 @@ def ajouter_recette():
                                VALUES (%s, %s, %s, %s) RETURNING id''', 
                             (request.form.get('nom'), request.form.get('description'), request.form.get('categorie'), est_sous))
                 recette_id = cur.fetchone()['id']
-                
                 for n, q, u in zip(request.form.getlist('ingredient_nom[]'), request.form.getlist('ingredient_quantite[]'), request.form.getlist('ingredient_unite[]')):
                     if n: cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, float(q) if q else 0.0, u))
-                
                 for s_id in request.form.getlist('sous_recette_id[]'):
                     cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
             conn.commit()
@@ -156,7 +137,6 @@ def ajouter_recette():
     return render_template('ajouter.html', sous_recettes=get_sous_recettes())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
-@login_required
 def modifier_recette(recette_id):
     if request.method == 'POST':
         est_sous = 'est_sous_recette' in request.form
@@ -172,7 +152,6 @@ def modifier_recette(recette_id):
                     cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
             conn.commit()
         return redirect(url_for('afficher_recette', recette_id=recette_id))
-
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
@@ -188,25 +167,20 @@ def imprimer_recette(recette_id):
             recette = cur.fetchone()
             cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
             ingredients = cur.fetchall()
-            cur.execute('SELECT r.* FROM Recettes r JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette WHERE s.id_recette = %s', (recette_id,))
-            sous_recettes = cur.fetchall()
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
     story = [Paragraph(f"Recette : {recette['nom']}", styles['Title']), Spacer(1, 12)]
-    story.append(Paragraph(f"Catégorie : {recette['categorie']}", styles['Normal']))
     story.append(Paragraph(f"Description : {recette['description']}", styles['Normal']))
     story.append(Spacer(1, 12), Paragraph("Ingrédients :", styles['Heading2']))
     for ing in ingredients:
         story.append(Paragraph(f"• {ing['quantite']} {ing['unite']} de {ing['nom']}", styles['Normal']))
-    
     doc.build(story)
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{recette['nom']}.pdf")
 
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
-@login_required
 def supprimer_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -221,7 +195,6 @@ def rechercher_recette():
     terme = request.args.get('terme', '').strip()
     type_r = request.args.get('type_recherche', 'nom')
     cat = request.args.get('categorie', '')
-    
     query = "SELECT * FROM Recettes WHERE 1=1"
     params = []
     if terme:
@@ -231,7 +204,6 @@ def rechercher_recette():
             query = "SELECT DISTINCT r.* FROM Recettes r JOIN Ingredients i ON r.id = i.id_recette WHERE i.nom ILIKE %s"; params.append(f'%{terme}%')
     if cat:
         query += " AND categorie = %s"; params.append(cat)
-
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(query, params)
@@ -243,23 +215,22 @@ def logout():
     logout_user()
     session.clear()
     return redirect(url_for('login'))
-    
-@app.route('/create_admin_final')
-def create_admin_final():
-    hash_password = generate_password_hash('EmmaLiam29!')
+
+# --- CONFIGURATION UTILISATEUR (A utiliser une seule fois) ---
+@app.route('/setup_users')
+def setup_users():
+    hash_password = generate_password_hash('SousChefs44')
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # On essaie d'abord de supprimer l'ancien 'admin' pour éviter les doublons
-                cur.execute("DELETE FROM users WHERE username = 'admin'")
-                # On insère le nouvel admin avec le bon hash
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", 
-                           ('admin', hash_password))
+                # Nettoyage et création du nouvel utilisateur
+                cur.execute("DELETE FROM users WHERE username = 'SousChefs'")
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", ('SousChefs', hash_password))
             conn.commit()
-        return "Compte admin créé avec succès ! Identifiant: admin | MDP: EmmaLiam29!"
+        return "Utilisateur 'SousChefs' créé avec succès !"
     except Exception as e:
         return f"Erreur : {str(e)}"
-    
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
