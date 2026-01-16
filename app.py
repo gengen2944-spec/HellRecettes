@@ -243,7 +243,23 @@ def logout():
     logout_user()
     session.clear()
     return redirect(url_for('login'))
-
+    
+@app.route('/create_admin_final')
+def create_admin_final():
+    hash_password = generate_password_hash('EmmaLiam29!')
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # On essaie d'abord de supprimer l'ancien 'admin' pour éviter les doublons
+                cur.execute("DELETE FROM users WHERE username = 'admin'")
+                # On insère le nouvel admin avec le bon hash
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", 
+                           ('admin', hash_password))
+            conn.commit()
+        return "Compte admin créé avec succès ! Identifiant: admin | MDP: EmmaLiam29!"
+    except Exception as e:
+        return f"Erreur : {str(e)}"
+    
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
