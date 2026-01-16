@@ -86,6 +86,14 @@ def est_sous_recette_utilisee(sous_recette_id):
             return cur.fetchall()
 
 # --- ROUTES ---
+@app.route('/reset_admin')
+def reset_admin():
+    new_pass = generate_password_hash('MON_NOUVEAU_MOT_DE_PASSE')
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET password = %s WHERE username = 'admin'", (new_pass,))
+        conn.commit()
+    return "Mot de passe réinitialisé pour l'utilisateur admin !"
 
 @app.route('/')
 def index():
