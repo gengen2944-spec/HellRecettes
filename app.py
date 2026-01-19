@@ -177,12 +177,13 @@ def imprimer_recette(recette_id):
     styles = getSampleStyleSheet()
     story = []
 
-    # Fonction pour ajouter une recette complète au PDF
+    # Fonction pour ajouter une recette complète au PDF sans préfixe
     def ajouter_bloc_recette(data_recette, est_principal=True):
+        # On utilise un style de titre légèrement plus petit pour les sous-recettes 
+        # pour garder une hiérarchie visuelle, mais sans texte ajouté
         titre_style = styles['Title'] if est_principal else styles['Heading1']
-        prefixe = "" if est_principal else "[SOUS-RECETTE] "
         
-        story.append(Paragraph(f"{prefixe}{data_recette['nom']}", titre_style))
+        story.append(Paragraph(data_recette['nom'], titre_style))
         story.append(Spacer(1, 12))
         
         # Description / Instructions
@@ -203,9 +204,9 @@ def imprimer_recette(recette_id):
             unite = ing['unite'] if ing['unite'] else ""
             story.append(Paragraph(f"• {quantite} {unite} {ing['nom']}", styles['Normal']))
         
-        # Ligne de séparation et saut de page pour la suivante
+        # Séparation visuelle entre les blocs
         story.append(Spacer(1, 24))
-        story.append(Paragraph("<hr/>", styles['Normal'])) # Ligne horizontale
+        story.append(Paragraph("<hr/>", styles['Normal']))
         story.append(Spacer(1, 24))
 
     # --- Construction du document ---
@@ -216,11 +217,23 @@ def imprimer_recette(recette_id):
     # 2. Ajouter chaque sous-recette à la suite
     for sr in sous_recettes:
         ajouter_bloc_recette(sr, est_principal=False)
-
+    
     doc.build(story)
     buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name=f"{recette_principale['nom']}.pdf")
+
+    # Nettoyage du nom de fichier : on remplace les espaces par des underscores
+    # et on s'assure qu'il n'y a pas de caractères interdits
+    nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
+    
+    return send_file(
+        buffer, 
+        mimetype='application/pdf', 
+        as_attachment=False, # Garde l'ouverture dans un nouvel onglet
+        download_name=f"{nom_fichier}.pdf"
+    )
+    
 # Correction ici : recette_id au lieu de id pour correspondre au HTML
+
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
 def supprimer_recette(recette_id):
     try:
