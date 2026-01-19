@@ -264,9 +264,41 @@ def rechercher_recette():
             recettes = cur.fetchall()
     return render_template('recherche.html', recettes=recettes, terme=terme)
 
+# --- ROUTE LOGIN ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Utilisation du nom de table 'users'
+                cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', 
+                           (username, password))
+                user = cur.fetchone()
+        
+        if user:
+            session['logged_in'] = True
+            session.permanent = True 
+            return redirect(url_for('index'))
+        else:
+            flash('Identifiants incorrects', 'danger')
+            
+    return render_template('login.html')
+
+# --- FILTRE DE SÉCURITÉ ---
+@app.before_request
+def check_login():
+    # On laisse passer le login et les fichiers CSS/Images
+    if request.endpoint not in ['login', 'static'] and not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+# --- LOGOUT ---
 @app.route('/logout')
 def logout():
-    return redirect(url_for('index'))
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
