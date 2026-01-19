@@ -112,16 +112,19 @@ def login():
                 cur.execute('SELECT * FROM users WHERE username = %s', (username,))
                 user_data = cur.fetchone()
         
+        # Le bloc ci-dessous doit être parfaitement aligné
         if user_data and check_password_hash(user_data['password'], password):
-    user_obj = User(user_data['id'], user_data['username']) # Crée l'objet
-    session.permanent = True
-    login_user(user_obj, remember=True) # Connecte l'objet
-
-    next_page = request.args.get('next')
-    return redirect(next_page if next_page and next_page.startswith('/') else url_for('index'))
-                
+            user_obj = User(user_data['id'], user_data['username']) # Ligne 116 corrigée
+            session.permanent = True
+            login_user(user_obj, remember=True)
+            
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('index')
             return redirect(next_page)
-        flash('Identifiants incorrects.')
+        else:
+            flash('Identifiants incorrects.')
+            
     return render_template('login.html')
 
 @app.route('/recette/<int:recette_id>')
