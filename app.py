@@ -56,7 +56,7 @@ def get_sous_recettes_utilisees(recette_id):
 def index():
     ordre_categories = [
         'A picorer', 
-        'Entrées/Plats', 
+        'Entrées/Plat', 
         'Desserts', 
         'Sauce/Marinade/Condiments'
     ]
