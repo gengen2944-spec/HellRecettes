@@ -121,19 +121,47 @@ def afficher_recette(recette_id):
 @app.route('/ajout', methods=['GET', 'POST'])
 def ajouter_recette():
     if request.method == 'POST':
-        est_sous = 'est_sous_recette' in request.form
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
-                               VALUES (%s, %s, %s, %s) RETURNING id''', 
-                            (request.form.get('nom'), request.form.get('description'), request.form.get('categorie'), est_sous))
-                recette_id = cur.fetchone()['id']
-                for n, q, u in zip(request.form.getlist('ingredient_nom[]'), request.form.getlist('ingredient_quantite[]'), request.form.getlist('ingredient_unite[]')):
-                    if n: cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, float(q) if q else 0.0, u))
-                for s_id in request.form.getlist('sous_recette_id[]'):
-                    cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
-            conn.commit()
-        return redirect(url_for('index'))
+        # On convertit le checkbox en 0 ou 1 pour PostgreSQL (smallint)
+        est_sous = 1 if 'est_sous_recette' in request.form else 0
+        
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    # Insertion de la recette
+                    cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
+                                   VALUES (%s, %s, %s, %s) RETURNING id''', 
+                                (request.form.get('nom'), request.form.get('description'), 
+                                 request.form.get('categorie'), est_sous))
+                    
+                    result = cur.fetchone()
+                    if not result:
+                        return "Erreur : L'ID n'a pas été généré."
+                    
+                    recette_id = result['id']
+
+                    # Insertion des ingrédients
+                    noms = request.form.getlist('ingredient_nom[]')
+                    quants = request.form.getlist('ingredient_quantite[]')
+                    unites = request.form.getlist('ingredient_unite[]')
+
+                    for n, q, u in zip(noms, quants, unites):
+                        if n.strip(): # On n'insère que si le nom n'est pas vide
+                            # On gère la quantité vide pour éviter le crash float
+                            q_val = float(q) if (q and q.strip()) else 0.0
+                            cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
+                                           VALUES (%s, %s, %s, %s)''', 
+                                        (recette_id, n, q_val, u))
+                    
+                    # Insertion des sous-recettes
+                    for s_id in request.form.getlist('sous_recette_id[]'):
+                        if s_id:
+                            cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
+                                        (recette_id, s_id))
+                conn.commit()
+            return redirect(url_for('index'))
+        except Exception as e:
+            return f"Erreur lors de l'enregistrement : {str(e)}"
+
     return render_template('ajouter.html', sous_recettes=get_sous_recettes())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
