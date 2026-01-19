@@ -17,15 +17,7 @@
     <main>
         {% block content %}{% endblock %}
     </main>
-<script>
-    window.addEventListener('beforeunload', function(e) {
-        // Envoyer une requête pour se déconnecter
-        fetch('{{ url_for("logout") }}', {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
-    });
-</script>
+
 
 </body>
 </html>
