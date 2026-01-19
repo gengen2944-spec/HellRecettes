@@ -244,54 +244,103 @@ def modifier_recette(recette_id):
         return f"Erreur de chargement : {str(e)}"
 
 @app.route('/recette/<int:recette_id>/imprimer')
+@login_required
 def imprimer_recette(recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette = cur.fetchone()
-            cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
-            ingredients = cur.fetchall()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
+                recette = cur.fetchone()
+                cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
+                ingredients = cur.fetchall()
+        
+        if not recette:
+            return "Recette introuvable", 404
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = [Paragraph(f"Recette : {recette['nom']}", styles['Title']), Spacer(1, 12)]
-    story.append(Paragraph(f"Description : {recette['description']}", styles['Normal']))
-    story.append(Spacer(1, 12), Paragraph("Ingrédients :", styles['Heading2']))
-    for ing in ingredients:
-        story.append(Paragraph(f"• {ing['quantite']} {ing['unite']} de {ing['nom']}", styles['Normal']))
-    doc.build(story)
-    buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{recette['nom']}.pdf")
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = []
 
-@app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
-def supprimer_recette(recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-            cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
-            cur.execute('DELETE FROM Recettes WHERE id = %s', (recette_id,))
-        conn.commit()
-    return redirect(url_for('index'))
+        # Titre
+        story.append(Paragraph(f"Recette : {recette['nom']}", styles['Title']))
+        story.append(Spacer(1, 12))
 
-@app.route('/rechercher', methods=['GET'])
+        # Catégorie et Description
+        story.append(Paragraph(f"<b>Catégorie :</b> {recette['categorie'] or 'Non classé'}", styles['Normal']))
+        story.append(Spacer(1, 12))
+        story.append(Paragraph(f"<b>Description :</b> {recette['description'] or ''}", styles['Normal']))
+        
+        # Ingrédients (Correction ici)
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("Ingrédients :", styles['Heading2']))
+        
+        for ing in ingredients:
+            # On gère les cas où les valeurs pourraient être None
+            q = ing['quantite'] if ing['quantite'] is not None else ""
+            u = ing['unite'] if ing['unite'] is not None else ""
+            n = ing['nom'] or ""
+            story.append(Paragraph(f"• {q} {u} {n}", styles['Normal']))
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        # Nom du fichier PDF sans espaces bizarres
+        filename = f"{recette['nom'].replace(' ', '_')}.pdf"
+        return send_file(buffer, mimetype='application/pdf', download_name=filename)
+        
+    except Exception as e:
+        return f"Erreur lors de la génération du PDF : {str(e)}"
+        
+@app.route('/recette/<int:id>/supprimer', methods=['POST'])
+@login_required
+def supprimer_recette(id):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Étape A : On enlève les dépendances
+                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (id,))
+                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (id, id))
+                
+                # Étape B : On enlève la recette elle-même
+                cur.execute('DELETE FROM Recettes WHERE id = %s', (id,))
+        
+        conn.commit() # Important pour valider les suppressions
+        return redirect(url_for('index'))
+    except Exception as e:
+        return f"Erreur lors de la suppression : {str(e)}"
+        
+@app.route('/recherche', methods=['GET'])  # On enlève le 'r' final pour correspondre au log
+@login_required
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
     type_r = request.args.get('type_recherche', 'nom')
     cat = request.args.get('categorie', '')
+    
     query = "SELECT * FROM Recettes WHERE 1=1"
     params = []
+    
     if terme:
         if type_r == 'nom': 
-            query += " AND nom ILIKE %s"; params.append(f'%{terme}%')
+            query += " AND nom ILIKE %s"
+            params.append(f'%{terme}%')
         elif type_r == 'ingredient':
-            query = "SELECT DISTINCT r.* FROM Recettes r JOIN Ingredients i ON r.id = i.id_recette WHERE i.nom ILIKE %s"; params.append(f'%{terme}%')
+            # Utilisation de ILIKE pour PostgreSQL
+            query = "SELECT DISTINCT r.* FROM Recettes r JOIN Ingredients i ON r.id = i.id_recette WHERE i.nom ILIKE %s"
+            params.append(f'%{terme}%')
+            
     if cat:
-        query += " AND categorie = %s"; params.append(cat)
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            recettes = cur.fetchall()
+        query += " AND categorie = %s"
+        params.append(cat)
+        
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                recettes = cur.fetchall()
+    except Exception as e:
+        return f"Erreur lors de la recherche : {str(e)}"
+        
     return render_template('recherche.html', recettes=recettes, terme=terme, categorie=cat)
 
 @app.route('/logout')
