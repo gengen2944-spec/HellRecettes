@@ -84,8 +84,8 @@ def index():
     return render_template('index.html', 
                            recettes_par_categorie=recettes_par_categorie, 
                            ordre_categories=ordre_categories)
-    except Exception as e:
-        return f"Erreur base de données : {str(e)}"
+    #except Exception as e:
+       # return f"Erreur base de données : {str(e)}"
 
 @app.route('/recette/<int:recette_id>')
 def afficher_recette(recette_id):
