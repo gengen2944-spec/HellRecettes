@@ -54,19 +54,36 @@ def get_sous_recettes_utilisees(recette_id):
 
 @app.route('/')
 def index():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT * FROM Recettes ORDER BY categorie, nom')
-                recettes = cur.fetchall()
-        
-        recettes_par_categorie = {}
-        categories = set()
-        for r in recettes:
-            cat = r['categorie'] or "Sans catégorie"
-            categories.add(cat)
-            recettes_par_categorie.setdefault(cat, []).append(r)
-        return render_template('index.html', recettes_par_categorie=recettes_par_categorie, categories=list(categories))
+    # Ordre et orthographe exacts selon vos catégories
+    ordre_categories = [
+        'A picorer', 
+        'Entrées/Plats', 
+        'Desserts', 
+        'Sauce/Marinade/Condiments'
+    ]
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM recettes ORDER BY nom ASC')
+            toutes_les_recettes = cur.fetchall()
+
+    # On organise les recettes dans un dictionnaire
+    recettes_par_categorie = {cat: [] for cat in ordre_categories}
+    
+    for r in toutes_les_recettes:
+        cat = r['categorie']
+        if cat in recettes_par_categorie:
+            recettes_par_categorie[cat].append(r)
+        else:
+            # Optionnel : si une catégorie n'est pas dans la liste, 
+            # on peut l'ajouter à la fin ou créer une catégorie "Autre"
+            if 'Autre' not in recettes_par_categorie:
+                recettes_par_categorie['Autre'] = []
+            recettes_par_categorie['Autre'].append(r)
+
+    return render_template('index.html', 
+                           recettes_par_categorie=recettes_par_categorie, 
+                           ordre_categories=ordre_categories)
     except Exception as e:
         return f"Erreur base de données : {str(e)}"
 
