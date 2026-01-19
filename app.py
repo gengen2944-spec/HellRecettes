@@ -25,31 +25,55 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
 # --- CONFIGURATION LOGIN ---
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
 class User(UserMixin):
-    def __init__(self, id, username):
-        self.id = id
+    def __init__(self, user_id, username):
+        # On s'assure que l'ID est stocké tel quel
+        self.id = user_id
         self.username = username
 
 @login_manager.user_loader
 def load_user(user_id):
-    # Sécurité : si user_id est None ou le texte "None", on arrête tout de suite
-    if user_id is None or str(user_id).lower() == 'none':
+    # Sécurité radicale contre le bug du "None"
+    if not user_id or str(user_id).lower() == 'none':
         return None
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT * FROM users WHERE id = %s', (user_id,))
+                # On force la conversion en entier pour PostgreSQL smallint/int
+                cur.execute('SELECT * FROM users WHERE id = %s', (int(user_id),))
                 u = cur.fetchone()
                 if u:
                     return User(u['id'], u['username'])
     except Exception as e:
-        print(f"Erreur load_user: {e}")
+        print(f"Erreur load_user : {e}")
     return None
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT * FROM users WHERE username = %s', (username,))
+                user_data = cur.fetchone()
+        
+        if user_data and check_password_hash(user_data['password'], password):
+            # Création de l'objet avec l'ID natif de la base (souvent un entier)
+            user_obj = User(user_data['id'], user_data['username'])
+            
+            session.permanent = True
+            login_user(user_obj, remember=True)
+            
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('index')
+            return redirect(next_page)
+        
+        flash('Identifiants incorrects.')
+    return render_template('login.html')
+    
 # --- FONCTIONS UTILITAIRES ---
 def get_ingredients(recette_id):
     with get_db_connection() as conn:
