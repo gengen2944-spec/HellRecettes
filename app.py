@@ -40,10 +40,9 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 class User(UserMixin):
-    def __init__(self, id, username, password):
-        self.id = id
+    def __init__(self, id, username): # On n'a pas besoin de stocker le password ici
+        self.id = str(id) # Flask-Login préfère les ID sous forme de string
         self.username = username
-        self.password = password
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -52,8 +51,12 @@ def load_user(user_id):
             with conn.cursor() as cur:
                 cur.execute('SELECT * FROM users WHERE id = %s', (user_id,))
                 u = cur.fetchone()
-                if u: return User(u['id'], u['username'], u['password'])
-    except: return None
+                if u: 
+                    # On crée l'objet avec seulement ID et Username
+                    return User(u['id'], u['username'])
+    except Exception as e:
+        print(f"Erreur load_user: {e}")
+        return None
     return None
 
 # --- FONCTIONS UTILITAIRES ---
@@ -110,16 +113,12 @@ def login():
                 user_data = cur.fetchone()
         
         if user_data and check_password_hash(user_data['password'], password):
-            user = User(user_data['id'], user_data['username'], user_data['password'])
-            
-            # Activation de la session permanente et du "Remember Me"
-            session.permanent = True
-            login_user(user, remember=True) 
-            
-            # Gestion du paramètre 'next' pour redirection après login
-            next_page = request.args.get('next')
-            if not next_page or not next_page.startswith('/'):
-                next_page = url_for('index')
+    user_obj = User(user_data['id'], user_data['username']) # Crée l'objet
+    session.permanent = True
+    login_user(user_obj, remember=True) # Connecte l'objet
+
+    next_page = request.args.get('next')
+    return redirect(next_page if next_page and next_page.startswith('/') else url_for('index'))
                 
             return redirect(next_page)
         flash('Identifiants incorrects.')
