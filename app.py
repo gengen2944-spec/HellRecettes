@@ -54,7 +54,6 @@ def get_sous_recettes_utilisees(recette_id):
 
 @app.route('/')
 def index():
-    # Ordre et orthographe exacts selon vos catégories
     ordre_categories = [
         'A picorer', 
         'Entrées/Plats', 
@@ -67,25 +66,31 @@ def index():
             cur.execute('SELECT * FROM recettes ORDER BY nom ASC')
             toutes_les_recettes = cur.fetchall()
 
-    # On organise les recettes dans un dictionnaire
     recettes_par_categorie = {cat: [] for cat in ordre_categories}
-    
+    recettes_par_categorie['Divers'] = [] # Colonne de secours
+
     for r in toutes_les_recettes:
-        cat = r['categorie']
-        if cat in recettes_par_categorie:
-            recettes_par_categorie[cat].append(r)
-        else:
-            # Optionnel : si une catégorie n'est pas dans la liste, 
-            # on peut l'ajouter à la fin ou créer une catégorie "Autre"
-            if 'Autre' not in recettes_par_categorie:
-                recettes_par_categorie['Autre'] = []
-            recettes_par_categorie['Autre'].append(r)
+        # On enlève les espaces superflus pour la comparaison
+        cat_recette = r['categorie'].strip() if r['categorie'] else ""
+        
+        found = False
+        for cat_fixe in ordre_categories:
+            if cat_recette.lower() == cat_fixe.lower():
+                recettes_par_categorie[cat_fixe].append(r)
+                found = True
+                break
+        
+        if not found:
+            recettes_par_categorie['Divers'].append(r)
+
+    # On ne passe à l'affichage que les catégories qui ont des recettes
+    categories_a_afficher = [c for c in ordre_categories if recettes_par_categorie[c]]
+    if recettes_par_categorie['Divers']:
+        categories_a_afficher.append('Divers')
 
     return render_template('index.html', 
                            recettes_par_categorie=recettes_par_categorie, 
-                           ordre_categories=ordre_categories)
-    #except Exception as e:
-       # return f"Erreur base de données : {str(e)}"
+                           ordre_categories=categories_a_afficher)
 
 @app.route('/recette/<int:recette_id>')
 def afficher_recette(recette_id):
