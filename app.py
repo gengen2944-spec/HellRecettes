@@ -10,12 +10,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
+# Utilisation de la variable d'environnement pour la sécurité
+app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
 
-# Utilisation de la variable d'environnement SECRET_KEY configurée sur Render
-# Si elle n'existe pas, on utilise une clé de secours (fallback)
-app.secret_key = os.environ.get('SECRET_KEY', 'cle_de_secours_par_defaut') 
-
-# Correction de l'URL pour Render/PostgreSQL (indispensable pour Supabase/Render)
+# Correction de l'URL pour Render/PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -23,12 +21,12 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 # --- GESTION DE LA BASE DE DONNÉES ---
 def get_db_connection():
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL manquante dans l'environnement Render")
+        raise ValueError("DATABASE_URL manquante dans l'environnement")
     return psycopg2.connect(
         DATABASE_URL, 
         cursor_factory=RealDictCursor,
         connect_timeout=15,
-        options="-c client_encoding=UTF8"
+        options="-c client_encoding=UTF8 -c prepare_threshold=0"
     )
 
 # --- FONCTIONS UTILITAIRES ---
@@ -184,14 +182,15 @@ def imprimer_recette(recette_id):
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', download_name=f"{recette['nom']}.pdf")
 
-@app.route('/recette/<int:id>/supprimer', methods=['POST'])
-def supprimer_recette(id):
+# Correction ici : recette_id au lieu de id pour correspondre au HTML
+@app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
+def supprimer_recette(recette_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (id,))
-                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (id, id))
-                cur.execute('DELETE FROM Recettes WHERE id = %s', (id,))
+                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
+                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (recette_id, recette_id))
+                cur.execute('DELETE FROM Recettes WHERE id = %s', (recette_id,))
             conn.commit()
     except Exception as e:
         print(f"Erreur suppression : {e}")
@@ -205,6 +204,10 @@ def rechercher_recette():
             cur.execute("SELECT * FROM Recettes WHERE nom ILIKE %s", (f'%{terme}%',))
             recettes = cur.fetchall()
     return render_template('recherche.html', recettes=recettes, terme=terme)
+
+@app.route('/logout')
+def logout():
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
