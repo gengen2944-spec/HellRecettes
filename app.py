@@ -12,7 +12,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
-app.secret_key = 'EmmaLiam29!') 
+app.secret_key = 'EmmaLiam29!'
 app.permanent_session_lifetime = timedelta(days=365) 
 
 app.config.update(
