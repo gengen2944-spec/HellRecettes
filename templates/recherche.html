@@ -1,56 +1,71 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h1>Rechercher une recette</h1>
+<div style="max-width: 800px; margin: 0 auto;">
+    <h1 style="text-align: center; color: #2e7d32; margin-bottom: 30px;">🔍 Rechercher une recette</h1>
 
-    <form method="GET" action="{{ url_for('rechercher_recette') }}">
-        <div style="margin-bottom: 20px;">
-            <label for="terme">Rechercher par :</label><br>
-            <input type="text" id="terme" name="terme" placeholder="Nom, ingrédient ou sous-recette" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-        </div>
+    <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; border-top: 5px solid #6c757d;">
+        <form method="GET" action="{{ url_for('rechercher_recette') }}">
+            
+            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                <div style="flex: 2; min-width: 250px;">
+                    <label for="terme" style="display: block; font-weight: bold; margin-bottom: 8px;">Mots-clés :</label>
+                    <input type="text" id="terme" name="terme" value="{{ terme if terme }}" placeholder="Nom, ingrédient..." style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                </div>
 
-        <div style="margin-bottom: 20px;">
-            <label for="type_recherche">Type de recherche :</label><br>
-            <select id="type_recherche" name="type_recherche" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-                <option value="nom">Nom de la recette</option>
-                <option value="ingredient">Ingrédient</option>
-                <option value="sous_recette">Sous-recette</option>
-            </select>
-        </div>
+                <div style="flex: 1; min-width: 200px;">
+                    <label for="type_recherche" style="display: block; font-weight: bold; margin-bottom: 8px;">Chercher dans :</label>
+                    <select id="type_recherche" name="type_recherche" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white;">
+                        <option value="nom">Nom de la recette</option>
+                        <option value="ingredient">Ingrédient</option>
+                        <option value="sous_recette">Sous-recette</option>
+                    </select>
+                </div>
+            </div>
 
-        <!-- Nouveau champ pour rechercher par catégorie -->
-        <div style="margin-bottom: 20px;">
-            <label for="categorie">Catégorie :</label><br>
-            <select id="categorie" name="categorie" style="width: 100%; padding: 8px;">
-                <option value="">Toutes les catégories</option>
-                <option value="A picorer">A picorer</option>
-                <option value="Entrées/plats">Entrées/plats</option>
-                <option value="Desserts">Desserts</option>
-                <option value="Sauce/Marinade/condiments">Sauce/Marinade/condiments</option>
-                <!-- Ajoute d'autres catégories selon ton projet -->
-            </select>
-        </div>
+            <div style="margin-bottom: 25px;">
+                <label for="categorie" style="display: block; font-weight: bold; margin-bottom: 8px;">Filtrer par catégorie :</label>
+                <select id="categorie" name="categorie" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white;">
+                    <option value="">Toutes les catégories</option>
+                    <option value="A picorer" {% if categorie == 'A picorer' %}selected{% endif %}>A picorer</option>
+                    <option value="Entrées/Plat" {% if categorie == 'Entrées/Plat' %}selected{% endif %}>Entrées/Plat</option>
+                    <option value="Desserts" {% if categorie == 'Desserts' %}selected{% endif %}>Desserts</option>
+                    <option value="Sauce/Marinade/Condiments" {% if categorie == 'Sauce/Marinade/Condiments' %}selected{% endif %}>Sauce/Marinade/Condiments</option>
+                </select>
+            </div>
 
-        <button type="submit" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
-            Rechercher
-        </button>
-    </form>
+            <button type="submit" style="width: 100%; padding: 15px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: bold; transition: background 0.3s;">
+                Lancer la recherche
+            </button>
+        </form>
+    </div>
 
     {% if terme or categorie %}
-        <h2 style="margin-top: 30px;">Résultats :</h2>
+        <h2 style="color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">
+            {% if recettes %}
+                ✅ {{ recettes|length }} résultat(s) trouvé(s)
+            {% else %}
+                ❌ Aucun résultat
+            {% endif %}
+        </h2>
+
         {% if recettes %}
-            <ul style="list-style: none; padding: 0;">
+            <div style="display: grid; gap: 15px;">
                 {% for recette in recettes %}
-                    <li style="margin-bottom: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 5px;">
-                        <a href="{{ url_for('afficher_recette', recette_id=recette['id']) }}" style="text-decoration: none; color: #333; font-weight: bold;">
-                            {{ recette['nom'] }}
-                        </a>
-                        <p style="margin: 5px 0; color: #666;">{{ recette['categorie'] }}</p>
-                    </li>
+                    <a href="{{ url_for('afficher_recette', recette_id=recette['id']) }}" style="text-decoration: none; color: inherit;">
+                        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #4CAF50; transition: transform 0.2s;">
+                            <div>
+                                <strong style="font-size: 1.1em; color: #2c3e50;">{{ recette['nom'] }}</strong>
+                                <div style="color: #7f8c8d; font-size: 0.9em; margin-top: 5px;">📂 {{ recette['categorie'] }}</div>
+                            </div>
+                            <span style="color: #4CAF50; font-weight: bold;">Voir →</span>
+                        </div>
+                    </a>
+                    <style>
+                        /* Petit effet au survol des résultats */
+                        div:hover { transform: translateX(5px); }
+                    </style>
                 {% endfor %}
-            </ul>
+            </div>
         {% else %}
-            <p>Aucune recette trouvée.</p>
-        {% endif %}
-    {% endif %}
-{% endblock %}
+            <div style="text-align: center; padding: 40px; background: #fff;
