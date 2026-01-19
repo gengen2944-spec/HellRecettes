@@ -189,7 +189,15 @@ def imprimer_recette(recette_id):
         # Description / Instructions
         if data_recette['description']:
             story.append(Paragraph("Instructions :", styles['Heading2']))
-            story.append(Paragraph(data_recette['description'], styles['Normal']))
+            
+            # 1. Nettoyage des \r\n résiduels
+            texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n')
+            
+            # 2. Conversion des sauts de ligne en balises <br/> pour ReportLab
+            # Cela permet de garder chaque étape sur une nouvelle ligne
+            description_formatee = texte_propre.replace('\n', '<br/>')
+            
+            story.append(Paragraph(description_formatee, styles['Normal']))
             story.append(Spacer(1, 12))
         
         # Ingrédients
