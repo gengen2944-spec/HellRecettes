@@ -121,8 +121,8 @@ def afficher_recette(recette_id):
 @app.route('/ajout', methods=['GET', 'POST'])
 def ajouter_recette():
     if request.method == 'POST':
-        # On convertit le checkbox en 0 ou 1 pour PostgreSQL (smallint)
-        est_sous = 1 if 'est_sous_recette' in request.form else 0
+        # ajout true false pour sql
+        est_sous = True if 'est_sous_recette' in request.form else False
         
         try:
             with get_db_connection() as conn:
