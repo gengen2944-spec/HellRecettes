@@ -324,11 +324,54 @@ def supprimer_recette(recette_id):
 @app.route('/recherche')
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM Recettes WHERE nom ILIKE %s", (f'%{terme}%',))
-            recettes = cur.fetchall()
-    return render_template('recherche.html', recettes=recettes, terme=terme)
+    type_recherche = request.args.get('type_recherche', 'nom') # Récupère le choix du menu
+    categorie = request.args.get('categorie', '')
+    
+    recettes = []
+    
+    if terme or categorie:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # 1. On prépare la base de la requête
+                # On utilise DISTINCT pour éviter d'avoir 3 fois la même recette 
+                # si elle a 3 ingrédients qui correspondent au terme.
+                query = 'SELECT DISTINCT r.* FROM recettes r'
+                params = []
+                
+                # 2. On adapte la jointure et la condition selon le type de recherche
+                if type_recherche == 'ingredient':
+                    query += ' JOIN Ingredients i ON r.id = i.id_recette'
+                    condition_terme = "i.nom ILIKE %s"
+                elif type_recherche == 'sous_recette':
+                    query += ' JOIN Liaison_SousRecettes lsr ON r.id = lsr.id_recette_principale'
+                    query += ' JOIN recettes sr ON lsr.id_sous_recette = sr.id'
+                    condition_terme = "sr.nom ILIKE %s"
+                else:
+                    condition_terme = "r.nom ILIKE %s"
+
+                # 3. Construction dynamique des filtres (Terme + Catégorie)
+                filters = []
+                if terme:
+                    filters.append(condition_terme)
+                    params.append(f'%{terme}%')
+                
+                if categorie:
+                    filters.append("r.categorie = %s")
+                    params.append(categorie)
+
+                if filters:
+                    query += " WHERE " + " AND ".join(filters)
+                
+                query += " ORDER BY r.nom ASC"
+                
+                cur.execute(query, tuple(params))
+                recettes = cur.fetchall()
+
+    return render_template('recherche.html', 
+                           recettes=recettes, 
+                           terme=terme, 
+                           type_recherche=type_recherche, 
+                           categorie=categorie)
 
 # --- ROUTE LOGIN ---
 @app.route('/login', methods=['GET', 'POST'])
