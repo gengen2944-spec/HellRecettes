@@ -5,19 +5,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion de Recettes</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        /* Style moderne pour la barre de navigation */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: #f4f7f6;
+        }
+
+        header {
+            background-color: #ffffff;
+            padding: 15px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        /* Style des liens calqué sur vos nouveaux boutons */
+        nav a {
+            text-decoration: none;
+            color: white;
+            background-color: #4CAF50; /* Vert pour l'action principale */
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        nav a:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Couleur spécifique pour le bouton recherche */
+        nav a[href="/recherche"] {
+            background-color: #6c757d;
+        }
+        
+        nav a[href="/recherche"]:hover {
+            background-color: #5a6268;
+        }
+
+        /* Couleur spécifique pour le bouton déconnexion (si vous l'ajoutez) */
+        .logout-btn {
+            background-color: #e53935;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+    </style>
 </head>
 <body>
     <header>
         <nav>
-            <a href="/">Accueil</a>
-            <a href="/ajout">Ajouter une recette</a>
-            <a href="/recherche">Rechercher</a>
+            <a href="/">🏠 Accueil</a>
+            <a href="/ajout">➕ Ajouter une recette</a>
+            <a href="/recherche">🔍 Rechercher</a>
+            {% if session.get('logged_in') %}
+                <a href="/logout" class="logout-btn">🚪 Déconnexion</a>
+            {% endif %}
         </nav>
     </header>
     <main>
         {% block content %}{% endblock %}
     </main>
-
-
 </body>
 </html>
