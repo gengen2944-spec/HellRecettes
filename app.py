@@ -15,6 +15,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
 app.permanent_session_lifetime = timedelta(days=365) 
 
+# 2. Création et configuration du login_manager (DOIT ÊTRE ICI)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
