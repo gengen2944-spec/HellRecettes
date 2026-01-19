@@ -6,7 +6,8 @@ from psycopg2.extras import RealDictCursor
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+#from reportlab.platypus import PageBreak
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -261,8 +262,51 @@ def imprimer_recette(recette_id):
         as_attachment=False, # Garde l'ouverture dans un nouvel onglet
         download_name=f"{nom_fichier}.pdf"
     )
+
+@app.route('/imprimer-book', methods=['POST'])
+def imprimer_book():
+    ids_selectionnes = request.form.getlist('selection')
     
-# Correction ici : recette_id au lieu de id pour correspondre au HTML
+    if not ids_selectionnes:
+        return redirect(url_for('index'))
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    story = []
+    styles = getSampleStyleSheet()
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for r_id in ids_selectionnes:
+                # Récupération de la recette
+                cur.execute('SELECT * FROM recettes WHERE id = %s', (r_id,))
+                recette = cur.fetchone()
+                
+                # Titre de la recette
+                story.append(Paragraph(recette['nom'], styles['Title']))
+                
+                # Instructions (avec gestion des sauts de ligne comme on l'a vu)
+                if recette['description']:
+                    story.append(Paragraph("Instructions :", styles['Heading2']))
+                    texte_propre = recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n')
+                    description_formatee = texte_propre.replace('\n', '<br/>')
+                    story.append(Paragraph(description_formatee, styles['Normal']))
+                
+                # Ingrédients
+                story.append(Paragraph("Ingrédients :", styles['Heading2']))
+                cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (r_id,))
+                ingredients = cur.fetchall()
+                for ing in ingredients:
+                    q = ing['quantite'] if ing['quantite'] else ""
+                    u = ing['unite'] if ing['unite'] else ""
+                    story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
+                
+                # Saut de page pour la recette suivante
+                story.append(PageBreak())
+
+    doc.build(story)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', download_name="Mon_Livre_de_Recettes.pdf")
 
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
 def supprimer_recette(recette_id):
