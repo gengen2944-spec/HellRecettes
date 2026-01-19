@@ -42,17 +42,11 @@
     <div style="margin-top: 20px; display: flex; gap: 10px;">
         <a href="{{ url_for('modifier_recette', recette_id=recette['id']) }}" style="padding: 10px 20px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 5px; text-align: center;">Modifier</a>
 
-        <form method="POST"
-              {% if recette['est_sous_recette'] %}
-                  action="{{ url_for('supprimer_sous_recette', sous_recette_id=recette['id']) }}"
-              {% else %}
-                  action="{{ url_for('supprimer_recette', recette_id=recette['id']) }}"
-              {% endif %}
-              style="margin: 0;">
-            <button type="submit" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;"
-                    onclick="return confirm('Êtes-vous sûr de vouloir supprimer {% if recette['est_sous_recette'] %}cette sous-recette{% else %}cette recette{% endif %} ?');">
-                Supprimer
-            </button>
+        <form method="POST" action="{{ url_for('supprimer_recette', recette_id=recette['id']) }}" style="margin: 0;">
+    <button type="submit" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;"
+            onclick="return confirm('Êtes-vous sûr de vouloir supprimer {% if recette['est_sous_recette'] %}cette sous-recette{% else %}cette recette{% endif %} ?');">
+        Supprimer
+    </button>
         </form>
 
         <a href="{{ url_for('imprimer_recette', recette_id=recette['id']) }}" target="_blank" style="padding: 10px 20px; background-color: #FF5722; color: white; text-decoration: none; border-radius: 5px; text-align: center;">Imprimer</a>
