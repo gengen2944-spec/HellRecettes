@@ -1,6 +1,8 @@
 import os
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from io import BytesIO
@@ -10,26 +12,52 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
+app.secret_key = 'EmmaLiam29!'
+app.permanent_session_lifetime = timedelta(days=365) 
 
-# Utilisation de la variable d'environnement SECRET_KEY configurée sur Render
-# Si elle n'existe pas, on utilise une clé de secours (fallback)
-app.secret_key = os.environ.get('SECRET_KEY', 'cle_de_secours_par_defaut') 
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
 
-# Correction de l'URL pour Render/PostgreSQL (indispensable pour Supabase/Render)
+# 2. Création et configuration du login_manager (DOIT ÊTRE ICI)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# --- GESTION DE LA BASE DE DONNÉES ---
 def get_db_connection():
     if not DATABASE_URL:
-        raise ValueError("DATABASE_URL manquante dans l'environnement Render")
-    return psycopg2.connect(
-        DATABASE_URL, 
-        cursor_factory=RealDictCursor,
-        connect_timeout=15,
-        options="-c client_encoding=UTF8"
-    )
+        raise ValueError("DATABASE_URL manquante")
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+
+# --- CONFIGURATION LOGIN ---
+class User(UserMixin):
+    def __init__(self, user_id, username):
+        # On s'assure que l'ID est stocké tel quel
+        self.id = user_id
+        self.username = username
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Sécurité radicale contre le bug du "None"
+    if user_id is None or str(user_id).lower() == 'none':
+        return None
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # On force la conversion en entier pour PostgreSQL smallint/int
+                cur.execute('SELECT * FROM users WHERE id = %s', (int(user_id),))
+                u = cur.fetchone()
+                if u:
+                    return User(u['id'], u['username'])
+    except Exception as e:
+        print(f"Erreur load_user : {e}")
+    return None
 
 # --- FONCTIONS UTILITAIRES ---
 def get_ingredients(recette_id):
@@ -55,24 +83,48 @@ def get_sous_recettes_utilisees(recette_id):
 # --- ROUTES ---
 
 @app.route('/')
+@login_required 
 def index():
-    try:
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM Recettes ORDER BY categorie, nom')
+            recettes = cur.fetchall()
+    
+    recettes_par_categorie = {}
+    categories = set()
+    for r in recettes:
+        cat = r['categorie'] or "Sans catégorie"
+        categories.add(cat)
+        recettes_par_categorie.setdefault(cat, []).append(r)
+    return render_template('index.html', recettes_par_categorie=recettes_par_categorie, categories=list(categories))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT * FROM Recettes ORDER BY categorie, nom')
-                recettes = cur.fetchall()
+                cur.execute('SELECT * FROM users WHERE username = %s', (username,))
+                user_data = cur.fetchone()
         
-        recettes_par_categorie = {}
-        categories = set()
-        for r in recettes:
-            cat = r['categorie'] or "Sans catégorie"
-            categories.add(cat)
-            recettes_par_categorie.setdefault(cat, []).append(r)
-        return render_template('index.html', recettes_par_categorie=recettes_par_categorie, categories=list(categories))
-    except Exception as e:
-        return f"Erreur base de données : {str(e)}"
+        if user_data and check_password_hash(user_data['password'], password):
+            # On crée l'objet avec l'ID de la base
+            user_obj = User(user_data['id'], user_data['username'])
+            session.permanent = True
+            login_user(user_obj, remember=True)
+            
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('index')
+            return redirect(next_page)
+        
+        flash('Identifiants incorrects.')
+    return render_template('login.html')
 
 @app.route('/recette/<int:recette_id>')
+@login_required
 def afficher_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -85,6 +137,7 @@ def afficher_recette(recette_id):
                            sous_recettes=get_sous_recettes_utilisees(recette_id))
 
 @app.route('/ajout', methods=['GET', 'POST'])
+@login_required
 def ajouter_recette():
     if request.method == 'POST':
         est_sous = True if 'est_sous_recette' in request.form else False
@@ -115,12 +168,14 @@ def ajouter_recette():
                             cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
                                         (recette_id, s_id))
                 conn.commit()
+            flash("Recette ajoutée !")
             return redirect(url_for('index'))
         except Exception as e:
-            return f"Erreur lors de l'ajout : {str(e)}"
+            return f"Erreur : {str(e)}"
     return render_template('ajouter.html', sous_recettes=get_sous_recettes())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
+@login_required
 def modifier_recette(recette_id):
     if request.method == 'POST':
         est_sous = True if 'est_sous_recette' in request.form else False
@@ -151,7 +206,7 @@ def modifier_recette(recette_id):
                 conn.commit()
             return redirect(url_for('index'))
         except Exception as e:
-            return f"Erreur modification : {str(e)}"
+            return f"Erreur : {str(e)}"
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -161,6 +216,7 @@ def modifier_recette(recette_id):
                            sous_recettes=get_sous_recettes(), sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
 
 @app.route('/recette/<int:recette_id>/imprimer')
+@login_required
 def imprimer_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -175,8 +231,6 @@ def imprimer_recette(recette_id):
     story = []
     story.append(Paragraph(f"Recette : {recette['nom']}", styles['Title']))
     story.append(Spacer(1, 12))
-    story.append(Paragraph(f"Description : {recette['description'] or ''}", styles['Normal']))
-    story.append(Spacer(1, 12))
     story.append(Paragraph("Ingrédients :", styles['Heading2']))
     for ing in ingredients:
         story.append(Paragraph(f"• {ing['quantite'] or ''} {ing['unite'] or ''} {ing['nom']}", styles['Normal']))
@@ -185,19 +239,18 @@ def imprimer_recette(recette_id):
     return send_file(buffer, mimetype='application/pdf', download_name=f"{recette['nom']}.pdf")
 
 @app.route('/recette/<int:id>/supprimer', methods=['POST'])
+@login_required
 def supprimer_recette(id):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (id,))
-                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (id, id))
-                cur.execute('DELETE FROM Recettes WHERE id = %s', (id,))
-            conn.commit()
-    except Exception as e:
-        print(f"Erreur suppression : {e}")
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (id,))
+            cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (id, id))
+            cur.execute('DELETE FROM Recettes WHERE id = %s', (id,))
+        conn.commit()
     return redirect(url_for('index'))
 
 @app.route('/recherche')
+@login_required
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
     with get_db_connection() as conn:
@@ -205,6 +258,12 @@ def rechercher_recette():
             cur.execute("SELECT * FROM Recettes WHERE nom ILIKE %s", (f'%{terme}%',))
             recettes = cur.fetchall()
     return render_template('recherche.html', recettes=recettes, terme=terme)
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    session.clear()
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
