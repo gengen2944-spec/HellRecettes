@@ -162,26 +162,64 @@ def modifier_recette(recette_id):
 def imprimer_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # 1. Récupérer la recette principale
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette = cur.fetchone()
-            cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
-            ingredients = cur.fetchall()
-    
+            recette_principale = cur.fetchone()
+            
+            # 2. Récupérer les sous-recettes liées
+            cur.execute('''SELECT r.* FROM Recettes r
+                           JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
+                           WHERE s.id_recette = %s''', (recette_id,))
+            sous_recettes = cur.fetchall()
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
     story = []
-    story.append(Paragraph(f"Recette : {recette['nom']}", styles['Title']))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(f"Description : {recette['description'] or ''}", styles['Normal']))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("Ingrédients :", styles['Heading2']))
-    for ing in ingredients:
-        story.append(Paragraph(f"• {ing['quantite'] or ''} {ing['unite'] or ''} {ing['nom']}", styles['Normal']))
+
+    # Fonction pour ajouter une recette complète au PDF
+    def ajouter_bloc_recette(data_recette, est_principal=True):
+        titre_style = styles['Title'] if est_principal else styles['Heading1']
+        prefixe = "" if est_principal else "[SOUS-RECETTE] "
+        
+        story.append(Paragraph(f"{prefixe}{data_recette['nom']}", titre_style))
+        story.append(Spacer(1, 12))
+        
+        # Description / Instructions
+        if data_recette['description']:
+            story.append(Paragraph("Instructions :", styles['Heading2']))
+            story.append(Paragraph(data_recette['description'], styles['Normal']))
+            story.append(Spacer(1, 12))
+        
+        # Ingrédients
+        story.append(Paragraph("Ingrédients :", styles['Heading2']))
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
+                ingredients = cur.fetchall()
+        
+        for ing in ingredients:
+            quantite = ing['quantite'] if ing['quantite'] else ""
+            unite = ing['unite'] if ing['unite'] else ""
+            story.append(Paragraph(f"• {quantite} {unite} {ing['nom']}", styles['Normal']))
+        
+        # Ligne de séparation et saut de page pour la suivante
+        story.append(Spacer(1, 24))
+        story.append(Paragraph("<hr/>", styles['Normal'])) # Ligne horizontale
+        story.append(Spacer(1, 24))
+
+    # --- Construction du document ---
+    
+    # 1. Ajouter la recette de base
+    ajouter_bloc_recette(recette_principale, est_principal=True)
+    
+    # 2. Ajouter chaque sous-recette à la suite
+    for sr in sous_recettes:
+        ajouter_bloc_recette(sr, est_principal=False)
+
     doc.build(story)
     buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name=f"{recette['nom']}.pdf")
-
+    return send_file(buffer, mimetype='application/pdf', download_name=f"{recette_principale['nom']}.pdf")
 # Correction ici : recette_id au lieu de id pour correspondre au HTML
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
 def supprimer_recette(recette_id):
