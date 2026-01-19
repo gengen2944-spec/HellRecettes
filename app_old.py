@@ -12,11 +12,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
-# La clé est fixe pour éviter de déconnecter tout le monde au redémarrage de Render
 app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
-
-# Configuration de la durée de session à 1 an (365 jours)
-app.permanent_session_lifetime = timedelta(days=365) 
+# Session longue de 30 jours pour plus de confort
+app.permanent_session_lifetime = timedelta(days=30) 
 
 # Correction de l'URL pour Render/PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -80,25 +78,20 @@ def get_sous_recettes_utilisees(recette_id):
 # --- ROUTES ---
 
 @app.route('/')
-@login_required 
+#@login_required # La porte d'entrée du site
 def index():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # Sécurité : On s'assure de ne récupérer que des recettes avec un ID valide
-                cur.execute('SELECT * FROM Recettes WHERE id IS NOT NULL ORDER BY categorie, nom')
-                recettes = cur.fetchall()
-        
-        recettes_par_categorie = {}
-        categories = set()
-        for r in recettes:
-            if r.get('id'): # Double vérification pour éviter le BuildError dans le template
-                cat = r['categorie'] or "Sans catégorie"
-                categories.add(cat)
-                recettes_par_categorie.setdefault(cat, []).append(r)
-        return render_template('index.html', recettes_par_categorie=recettes_par_categorie, categories=list(categories))
-    except Exception as e:
-        return f"Erreur critique base de données : {str(e)}"
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM Recettes ORDER BY categorie, nom')
+            recettes = cur.fetchall()
+    
+    recettes_par_categorie = {}
+    categories = set()
+    for r in recettes:
+        cat = r['categorie']
+        categories.add(cat)
+        recettes_par_categorie.setdefault(cat, []).append(r)
+    return render_template('index.html', recettes_par_categorie=recettes_par_categorie, categories=list(categories))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -108,32 +101,19 @@ def login():
             with conn.cursor() as cur:
                 cur.execute('SELECT * FROM users WHERE username = %s', (username,))
                 user_data = cur.fetchone()
-        
         if user_data and check_password_hash(user_data['password'], password):
             user = User(user_data['id'], user_data['username'], user_data['password'])
-            
-            # Activation de la session permanente et du "Remember Me"
-            session.permanent = True
-            login_user(user, remember=True) 
-            
-            # Gestion du paramètre 'next' pour redirection après login
-            next_page = request.args.get('next')
-            if not next_page or not next_page.startswith('/'):
-                next_page = url_for('index')
-                
-            return redirect(next_page)
+            login_user(user, remember=True) # "Remember me" activé par défaut
+            return redirect(url_for('index'))
         flash('Identifiants incorrects.')
     return render_template('login.html')
 
 @app.route('/recette/<int:recette_id>')
-@login_required
 def afficher_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette = cur.fetchone()
-    if not recette:
-        return "Recette introuvable", 404
     return render_template('recette.html', recette=recette, 
                            ingredients=get_ingredients(recette_id), 
                            sous_recettes=get_sous_recettes_utilisees(recette_id))
@@ -142,55 +122,79 @@ def afficher_recette(recette_id):
 @login_required
 def ajouter_recette():
     if request.method == 'POST':
-        # Envoi d'un vrai Booléen pour PostgreSQL
+        # On envoie un vrai Booléen Python (True/False) pour PostgreSQL
         est_sous = True if 'est_sous_recette' in request.form else False
+        
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    # RETURNING id est crucial pour éviter les recettes sans ID
+                    # 1. Insertion de la recette principale
                     cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
                                    VALUES (%s, %s, %s, %s) RETURNING id''', 
-                                (request.form.get('nom'), request.form.get('description'), 
-                                 request.form.get('categorie'), est_sous))
+                                (request.form.get('nom'), 
+                                 request.form.get('description'), 
+                                 request.form.get('categorie'), 
+                                 est_sous))
+                    
                     recette_id = cur.fetchone()['id']
 
+                    # 2. Insertion des ingrédients
                     noms = request.form.getlist('ingredient_nom[]')
                     quants = request.form.getlist('ingredient_quantite[]')
                     unites = request.form.getlist('ingredient_unite[]')
 
                     for n, q, u in zip(noms, quants, unites):
-                        if n.strip():
+                        if n.strip():  # On n'insère que si le nom de l'ingrédient n'est pas vide
+                            # Sécurité : on gère la quantité vide ou mal formée
                             try:
                                 q_val = float(q.replace(',', '.')) if q and q.strip() else 0.0
                             except ValueError:
                                 q_val = 0.0
+                                
                             cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
-                                           VALUES (%s, %s, %s, %s)''', (recette_id, n, q_val, u))
+                                           VALUES (%s, %s, %s, %s)''', 
+                                        (recette_id, n, q_val, u))
                     
-                    for s_id in request.form.getlist('sous_recette_id[]'):
+                    # 3. Insertion des liens vers les sous-recettes
+                    sous_recettes_selectionnees = request.form.getlist('sous_recette_id[]')
+                    for s_id in sous_recettes_selectionnees:
                         if s_id:
-                            cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                        (recette_id, s_id))
+                            cur.execute('''INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) 
+                                           VALUES (%s, %s)''', (recette_id, s_id))
+                
                 conn.commit()
             flash("Recette ajoutée avec succès !")
             return redirect(url_for('index'))
+            
         except Exception as e:
+            # En cas d'erreur, on affiche le message précis pour débugger
             return f"Erreur lors de l'enregistrement : {str(e)}"
+
     return render_template('ajouter.html', sous_recettes=get_sous_recettes())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
 @login_required
 def modifier_recette(recette_id):
     if request.method == 'POST':
+        # Conversion pour le type BOOLEAN de PostgreSQL
         est_sous = True if 'est_sous_recette' in request.form else False
+        
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
-                                   WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
-                                                    request.form.get('categorie'), est_sous, recette_id))
+                    # 1. Mise à jour des infos principales de la recette
+                    cur.execute('''UPDATE Recettes 
+                                   SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
+                                   WHERE id=%s''', 
+                                (request.form.get('nom'), 
+                                 request.form.get('description'), 
+                                 request.form.get('categorie'), 
+                                 est_sous, 
+                                 recette_id))
 
+                    # 2. Gestion des ingrédients : on supprime les anciens et on remet les nouveaux
                     cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
+                    
                     noms = request.form.getlist('ingredient_nom[]')
                     quants = request.form.getlist('ingredient_quantite[]')
                     unites = request.form.getlist('ingredient_unite[]')
@@ -198,29 +202,46 @@ def modifier_recette(recette_id):
                     for n, q, u in zip(noms, quants, unites):
                         if n.strip():
                             try:
+                                # Gestion des virgules et des champs vides pour le type FLOAT
                                 q_val = float(q.replace(',', '.')) if q and q.strip() else 0.0
                             except ValueError:
                                 q_val = 0.0
-                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
+                            
+                            cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
+                                           VALUES (%s, %s, %s, %s)''', 
                                         (recette_id, n, q_val, u))
 
+                    # 3. Gestion des sous-recettes liées
                     cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
                     for s_id in request.form.getlist('sous_recette_id[]'):
                         if s_id:
-                            cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                        (recette_id, s_id))
+                            cur.execute('''INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) 
+                                           VALUES (%s, %s)''', (recette_id, s_id))
+                
                 conn.commit()
-            flash("Recette mise à jour !")
+            flash("Recette mise à jour avec succès !")
             return redirect(url_for('index'))
+            
         except Exception as e:
-            return f"Erreur : {str(e)}"
+            return f"Erreur lors de la modification : {str(e)}"
 
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette = cur.fetchone()
-    return render_template('modifier_recette.html', recette=recette, ingredients=get_ingredients(recette_id), 
-                           sous_recettes=get_sous_recettes(), sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
+    # Partie GET : Chargement des données pour afficher le formulaire
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
+                recette = cur.fetchone()
+        
+        if not recette:
+            return "Recette introuvable", 404
+
+        return render_template('modifier_recette.html', 
+                               recette=recette, 
+                               ingredients=get_ingredients(recette_id), 
+                               sous_recettes=get_sous_recettes(), 
+                               sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
+    except Exception as e:
+        return f"Erreur de chargement : {str(e)}"
 
 @app.route('/recette/<int:recette_id>/imprimer')
 @login_required
@@ -233,20 +254,29 @@ def imprimer_recette(recette_id):
                 cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
                 ingredients = cur.fetchall()
         
+        if not recette:
+            return "Recette introuvable", 404
+
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)
         styles = getSampleStyleSheet()
         story = []
 
+        # Titre
         story.append(Paragraph(f"Recette : {recette['nom']}", styles['Title']))
         story.append(Spacer(1, 12))
-        story.append(Paragraph(f"<b>Catégorie :</b> {recette['categorie'] or ''}", styles['Normal']))
+
+        # Catégorie et Description
+        story.append(Paragraph(f"<b>Catégorie :</b> {recette['categorie'] or 'Non classé'}", styles['Normal']))
         story.append(Spacer(1, 12))
         story.append(Paragraph(f"<b>Description :</b> {recette['description'] or ''}", styles['Normal']))
+        
+        # Ingrédients (Correction ici)
         story.append(Spacer(1, 12))
         story.append(Paragraph("Ingrédients :", styles['Heading2']))
         
         for ing in ingredients:
+            # On gère les cas où les valeurs pourraient être None
             q = ing['quantite'] if ing['quantite'] is not None else ""
             u = ing['unite'] if ing['unite'] is not None else ""
             n = ing['nom'] or ""
@@ -254,9 +284,13 @@ def imprimer_recette(recette_id):
         
         doc.build(story)
         buffer.seek(0)
-        return send_file(buffer, mimetype='application/pdf', download_name=f"{recette['nom'].replace(' ', '_')}.pdf")
+        
+        # Nom du fichier PDF sans espaces bizarres
+        filename = f"{recette['nom'].replace(' ', '_')}.pdf"
+        return send_file(buffer, mimetype='application/pdf', download_name=filename)
+        
     except Exception as e:
-        return f"Erreur PDF : {str(e)}"
+        return f"Erreur lors de la génération du PDF : {str(e)}"
         
 @app.route('/recette/<int:id>/supprimer', methods=['POST'])
 @login_required
@@ -264,37 +298,49 @@ def supprimer_recette(id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Nettoyage manuel des dépendances pour PostgreSQL
+                # Étape A : On enlève les dépendances
                 cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (id,))
                 cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (id, id))
+                
+                # Étape B : On enlève la recette elle-même
                 cur.execute('DELETE FROM Recettes WHERE id = %s', (id,))
-            conn.commit()
+        
+        conn.commit() # Important pour valider les suppressions
         return redirect(url_for('index'))
     except Exception as e:
-        return f"Erreur suppression : {str(e)}"
+        return f"Erreur lors de la suppression : {str(e)}"
         
-@app.route('/recherche', methods=['GET'])
+@app.route('/recherche', methods=['GET'])  # On enlève le 'r' final pour correspondre au log
 @login_required
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
     type_r = request.args.get('type_recherche', 'nom')
     cat = request.args.get('categorie', '')
+    
     query = "SELECT * FROM Recettes WHERE 1=1"
     params = []
     
     if terme:
         if type_r == 'nom': 
-            query += " AND nom ILIKE %s"; params.append(f'%{terme}%')
+            query += " AND nom ILIKE %s"
+            params.append(f'%{terme}%')
         elif type_r == 'ingredient':
-            # Utilisation de DISTINCT pour ne pas avoir 10 fois la même recette
-            query = "SELECT DISTINCT r.* FROM Recettes r JOIN Ingredients i ON r.id = i.id_recette WHERE i.nom ILIKE %s"; params.append(f'%{terme}%')
+            # Utilisation de ILIKE pour PostgreSQL
+            query = "SELECT DISTINCT r.* FROM Recettes r JOIN Ingredients i ON r.id = i.id_recette WHERE i.nom ILIKE %s"
+            params.append(f'%{terme}%')
+            
     if cat:
-        query += " AND categorie = %s"; params.append(cat)
+        query += " AND categorie = %s"
+        params.append(cat)
         
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, params)
-            recettes = cur.fetchall()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                recettes = cur.fetchall()
+    except Exception as e:
+        return f"Erreur lors de la recherche : {str(e)}"
+        
     return render_template('recherche.html', recettes=recettes, terme=terme, categorie=cat)
 
 @app.route('/logout')
@@ -302,6 +348,21 @@ def logout():
     logout_user()
     session.clear()
     return redirect(url_for('login'))
+
+# --- CONFIGURATION UTILISATEUR (A utiliser une seule fois) ---
+@app.route('/setup_users')
+def setup_users():
+    hash_password = generate_password_hash('SousChefs44')
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Nettoyage et création du nouvel utilisateur
+                cur.execute("DELETE FROM users WHERE username = 'SousChefs'")
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", ('SousChefs', hash_password))
+            conn.commit()
+        return "Utilisateur 'SousChefs' créé avec succès !"
+    except Exception as e:
+        return f"Erreur : {str(e)}"
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
