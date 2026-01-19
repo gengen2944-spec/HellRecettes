@@ -12,8 +12,14 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
+app.secret_key = 'EmmaLiam29!') 
 app.permanent_session_lifetime = timedelta(days=365) 
+
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
 
 # 2. Création et configuration du login_manager (DOIT ÊTRE ICI)
 login_manager = LoginManager()
@@ -39,7 +45,7 @@ class User(UserMixin):
 @login_manager.user_loader
 def load_user(user_id):
     # Sécurité radicale contre le bug du "None"
-    if not user_id or str(user_id).lower() == 'none':
+    if user_id is None or str(user_id).lower() == 'none':
         return None
     try:
         with get_db_connection() as conn:
