@@ -1,51 +1,6 @@
 {% extends "base.html" %}
+
 {% block content %}
-
-<form action="{{ url_for('imprimer_book') }}" method="POST" id="form-book">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0;">
-        <h1 style="margin: 0; font-size: 1.8em;">Mon Carnet de Recettes</h1>
-        
-        <div style="display: flex; gap: 10px;">
-            <button type="button" id="btn-toggle-all" onclick="toggleAll()" style="padding: 10px 15px; background-color: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                ✅ Tout Cocher / Décocher
-            </button>
-            
-            <button type="submit" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                🖨️ Imprimer la sélection (Book)
-            </button>
-        </div>
-    </div>
-
-    <div style="display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-        {% for cat in ordre_categories %}
-            {% if recettes_par_categorie[cat] %}
-            <div style="flex: 1; min-width: 250px; background: #ffffff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-top: 4px solid #4CAF50; margin-bottom: 20px;">
-                <h2 style="margin-top: 0; color: #2e7d32; font-size: 1.1em; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                    {{ cat }} 
-                </h2>
-                <ul style="list-style: none; padding: 0;">
-                    {% for recette in recettes_par_categorie[cat] %}
-                    <li style="margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" name="selection" value="{{ recette['id'] }}" class="recette-checkbox" style="width: 18px; height: 18px; cursor: pointer;">
-                        <a href="{{ url_for('afficher_recette', recette_id=recette['id']) }}" style="text-decoration: none; color: #333; font-weight: 500;">
-                            {{ recette['nom'] }}
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-        {% endfor %}
-    </div>
-</form>
-
-<script>
-function toggleAll() {
-    const checkboxes = document.querySelectorAll('.recette-checkbox');
-    // Vérifie si au moins une case est décochée
-    const allChecked = Array.from(c{% extends "base.html" %}
-{% block content %}
-
 <div style="background: #e8f5e9; padding: 20px; border-radius: 10px; margin-bottom: 30px; border: 1px solid #c8e6c9;">
     <form action="{{ url_for('rechercher_recette') }}" method="GET" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
         <input type="text" name="terme" placeholder="Rechercher une recette ou un ingrédient..." style="flex: 2; min-width: 200px; padding: 10px; border-radius: 6px; border: 1px solid #ddd;">
@@ -57,7 +12,6 @@ function toggleAll() {
 
         <select name="categorie" style="padding: 10px; border-radius: 6px; border: 1px solid #ddd; background: white;">
             <option value="">Toutes les catégories</option>
-            {# BOUCLE DYNAMIQUE : lit la table Categories #}
             {% for cat in categories %}
                 <option value="{{ cat }}">{{ cat }}</option>
             {% endfor %}
@@ -111,20 +65,9 @@ function toggleAll() {
 function toggleAll() {
     const checkboxes = document.querySelectorAll('.recette-checkbox');
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
     checkboxes.forEach(cb => {
         cb.checked = !allChecked;
     });
 }
 </script>
-
-{% endblock %}heckboxes).every(cb => cb.checked);
-    
-    checkboxes.forEach(cb => {
-        // Si tout est coché, on décoche tout. Sinon, on coche tout.
-        cb.checked = !allChecked;
-    });
-}
-</script>
-
 {% endblock %}
