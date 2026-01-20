@@ -16,11 +16,12 @@
 
             <div style="margin-bottom: 15px;">
                 <label for="categorie" style="display: block; font-weight: bold; margin-bottom: 5px;">Catégorie :</label>
-                <select id="categorie" name="categorie" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white;">
-                    <option value="A picorer">A picorer</option>
-                    <option value="Entrées/Plat">Entrées/Plat</option>
-                    <option value="Desserts">Desserts</option>
-                    <option value="Sauce/Marinade/Condiments">Sauce/Marinade/Condiments</option>
+                <select id="categorie" name="categorie" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white;" required>
+                    <option value="" disabled selected>-- Choisir une catégorie --</option>
+                    {# BOUCLE DYNAMIQUE : lit la table Categories #}
+                    {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -81,19 +82,27 @@
 </div>
 
 <script>
+    // Ajoute un premier champ d'ingrédient automatiquement au démarrage
+    window.onload = function() {
+        ajouterIngredient();
+    };
+
     function ajouterIngredient() {
         const div = document.createElement('div');
         div.style = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px;';
         div.innerHTML = `
             <input type="text" name="ingredient_nom[]" placeholder="Nom" style="flex: 3; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" required>
-            <input type="number" name="ingredient_quantite[]" placeholder="Qté" step="0.01" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="text" name="ingredient_quantite[]" placeholder="Qté" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             <select name="ingredient_unite[]" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">unité</option>
                 <option value="g">g</option>
                 <option value="Kg">Kg</option>
                 <option value="Pièce">Pce</option>
                 <option value="PM">PM</option>
                 <option value="L">L</option>
                 <option value="cl">cl</option>
+                <option value="C. à Soupe">C. à Soupe</option>
+                <option value="C. à Café">C. à Café</option>
             </select>
             <button type="button" onclick="this.parentElement.remove()" style="padding: 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>
         `;

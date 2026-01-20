@@ -7,12 +7,11 @@ from io import BytesIO
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-#from reportlab.platypus import PageBreak
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
-# Utilisation de la variable d'environnement pour la sécurité
 app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
+app.permanent_session_lifetime = timedelta(days=31)
 
 # Correction de l'URL pour Render/PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -20,6 +19,7 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # --- GESTION DE LA BASE DE DONNÉES ---
+
 def get_db_connection():
     if not DATABASE_URL:
         raise ValueError("DATABASE_URL manquante dans l'environnement")
@@ -30,6 +30,17 @@ def get_db_connection():
         options="-c client_encoding=UTF8 -c prepare_threshold=0"
     )
 
+def recuperer_categories():
+    """Récupère la liste des noms de catégories depuis la table de référence"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT nom FROM Categories ORDER BY nom ASC")
+                return [row['nom'] for row in cur.fetchall()]
+    except Exception as e:
+        print(f"Erreur lors de la récupération des catégories : {e}")
+        return []
+
 # --- FONCTIONS UTILITAIRES ---
 def get_ingredients(recette_id):
     with get_db_connection() as conn:
@@ -37,10 +48,10 @@ def get_ingredients(recette_id):
             cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
             return cur.fetchall()
 
-def get_sous_recettes():
+def get_sous_recettes_disponibles():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE est_sous_recette = TRUE')
+            cur.execute('SELECT * FROM Recettes WHERE est_sous_recette = TRUE ORDER BY nom')
             return cur.fetchall()
 
 def get_sous_recettes_utilisees(recette_id):
@@ -55,23 +66,19 @@ def get_sous_recettes_utilisees(recette_id):
 
 @app.route('/')
 def index():
-    ordre_categories = [
-        'A picorer', 
-        'Entrées/Plat', 
-        'Desserts', 
-        'Sauce/Marinade/Condiments'
-    ]
+    # 1. Récupération des catégories depuis la table Categories
+    ordre_categories = recuperer_categories()
     
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM recettes ORDER BY nom ASC')
             toutes_les_recettes = cur.fetchall()
 
+    # 2. Organisation des recettes par catégorie
     recettes_par_categorie = {cat: [] for cat in ordre_categories}
-    recettes_par_categorie['Divers'] = [] # Colonne de secours
+    recettes_par_categorie['Divers'] = [] 
 
     for r in toutes_les_recettes:
-        # On enlève les espaces superflus pour la comparaison
         cat_recette = r['categorie'].strip() if r['categorie'] else ""
         
         found = False
@@ -84,14 +91,15 @@ def index():
         if not found:
             recettes_par_categorie['Divers'].append(r)
 
-    # On ne passe à l'affichage que les catégories qui ont des recettes
+    # 3. On ne garde que les catégories qui contiennent des recettes
     categories_a_afficher = [c for c in ordre_categories if recettes_par_categorie[c]]
     if recettes_par_categorie['Divers']:
         categories_a_afficher.append('Divers')
 
     return render_template('index.html', 
                            recettes_par_categorie=recettes_par_categorie, 
-                           ordre_categories=categories_a_afficher)
+                           ordre_categories=categories_a_afficher,
+                           categories=ordre_categories)
 
 @app.route('/recette/<int:recette_id>')
 def afficher_recette(recette_id):
@@ -108,7 +116,7 @@ def afficher_recette(recette_id):
 @app.route('/ajout', methods=['GET', 'POST'])
 def ajouter_recette():
     if request.method == 'POST':
-        est_sous = True if 'est_sous_recette' in request.form else False
+        est_sous = 'est_sous_recette' in request.form
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -125,9 +133,9 @@ def ajouter_recette():
                     for n, q, u in zip(noms, quants, unites):
                         if n.strip():
                             try:
-                                q_val = float(q.replace(',', '.')) if q and q.strip() else 0.0
+                                q_val = float(q.replace(',', '.')) if q and q.strip() else None
                             except ValueError:
-                                q_val = 0.0
+                                q_val = None
                             cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
                                            VALUES (%s, %s, %s, %s)''', (recette_id, n, q_val, u))
                     
@@ -139,12 +147,15 @@ def ajouter_recette():
             return redirect(url_for('index'))
         except Exception as e:
             return f"Erreur lors de l'ajout : {str(e)}"
-    return render_template('ajouter.html', sous_recettes=get_sous_recettes())
+
+    return render_template('ajouter.html', 
+                           categories=recuperer_categories(), 
+                           sous_recettes=get_sous_recettes_disponibles())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
 def modifier_recette(recette_id):
     if request.method == 'POST':
-        est_sous = True if 'est_sous_recette' in request.form else False
+        est_sous = 'est_sous_recette' in request.form
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -158,11 +169,11 @@ def modifier_recette(recette_id):
                                        request.form.getlist('ingredient_unite[]')):
                         if n.strip():
                             try:
-                                q_val = float(q.replace(',', '.')) if q and q.strip() else 0.0
+                                q_val = float(q.replace(',', '.')) if q and q.strip() else None
                             except ValueError:
-                                q_val = 0.0
+                                q_val = None
                             cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
-                                        (recette_id, n, q_val, u))
+                                         (recette_id, n, q_val, u))
 
                     cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
                     for s_id in request.form.getlist('sous_recette_id[]'):
@@ -170,7 +181,7 @@ def modifier_recette(recette_id):
                             cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
                                         (recette_id, s_id))
                 conn.commit()
-            return redirect(url_for('index'))
+            return redirect(url_for('afficher_recette', recette_id=recette_id))
         except Exception as e:
             return f"Erreur modification : {str(e)}"
 
@@ -178,18 +189,22 @@ def modifier_recette(recette_id):
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette = cur.fetchone()
-    return render_template('modifier_recette.html', recette=recette, ingredients=get_ingredients(recette_id), 
-                           sous_recettes=get_sous_recettes(), sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
+            
+    return render_template('modifier_recette.html', 
+                           recette=recette, 
+                           ingredients=get_ingredients(recette_id), 
+                           categories=recuperer_categories(),
+                           sous_recettes=get_sous_recettes_disponibles(), 
+                           sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
+
+# --- ROUTES PDF ET RECHERCHE (Inchangées mais nettoyées) ---
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # 1. Récupérer la recette principale
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette_principale = cur.fetchone()
-            
-            # 2. Récupérer les sous-recettes liées
             cur.execute('''SELECT r.* FROM Recettes r
                            JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
                            WHERE s.id_recette = %s''', (recette_id,))
@@ -200,30 +215,18 @@ def imprimer_recette(recette_id):
     styles = getSampleStyleSheet()
     story = []
 
-    # Fonction pour ajouter une recette complète au PDF sans préfixe
     def ajouter_bloc_recette(data_recette, est_principal=True):
-        # On utilise un style de titre légèrement plus petit pour les sous-recettes 
-        # pour garder une hiérarchie visuelle, mais sans texte ajouté
         titre_style = styles['Title'] if est_principal else styles['Heading1']
-        
         story.append(Paragraph(data_recette['nom'], titre_style))
         story.append(Spacer(1, 12))
         
-        # Description / Instructions
         if data_recette['description']:
             story.append(Paragraph("Instructions :", styles['Heading2']))
-            
-            # 1. Nettoyage des \r\n résiduels
             texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n')
-            
-            # 2. Conversion des sauts de ligne en balises <br/> pour ReportLab
-            # Cela permet de garder chaque étape sur une nouvelle ligne
             description_formatee = texte_propre.replace('\n', '<br/>')
-            
             story.append(Paragraph(description_formatee, styles['Normal']))
             story.append(Spacer(1, 12))
         
-        # Ingrédients
         story.append(Paragraph("Ingrédients :", styles['Heading2']))
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -231,42 +234,26 @@ def imprimer_recette(recette_id):
                 ingredients = cur.fetchall()
         
         for ing in ingredients:
-            quantite = ing['quantite'] if ing['quantite'] else ""
-            unite = ing['unite'] if ing['unite'] else ""
-            story.append(Paragraph(f"• {quantite} {unite} {ing['nom']}", styles['Normal']))
+            q = ing['quantite'] if ing['quantite'] else ""
+            u = ing['unite'] if ing['unite'] else ""
+            story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
         
-        # Séparation visuelle entre les blocs
         story.append(Spacer(1, 24))
         story.append(Paragraph("<hr/>", styles['Normal']))
         story.append(Spacer(1, 24))
 
-    # --- Construction du document ---
-    
-    # 1. Ajouter la recette de base
     ajouter_bloc_recette(recette_principale, est_principal=True)
-    
-    # 2. Ajouter chaque sous-recette à la suite
     for sr in sous_recettes:
         ajouter_bloc_recette(sr, est_principal=False)
     
     doc.build(story)
     buffer.seek(0)
-
-    # Nettoyage du nom de fichier : on remplace les espaces par des underscores
-    # et on s'assure qu'il n'y a pas de caractères interdits
     nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
-    
-    return send_file(
-        buffer, 
-        mimetype='application/pdf', 
-        as_attachment=False, # Garde l'ouverture dans un nouvel onglet
-        download_name=f"{nom_fichier}.pdf"
-    )
+    return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{nom_fichier}.pdf")
 
 @app.route('/imprimer-book', methods=['POST'])
 def imprimer_book():
     ids_selectionnes = request.form.getlist('selection')
-    
     if not ids_selectionnes:
         return redirect(url_for('index'))
 
@@ -278,30 +265,20 @@ def imprimer_book():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             for r_id in ids_selectionnes:
-                # Récupération de la recette
                 cur.execute('SELECT * FROM recettes WHERE id = %s', (r_id,))
                 recette = cur.fetchone()
-                
-                # Titre de la recette
                 story.append(Paragraph(recette['nom'], styles['Title']))
-                
-                # Instructions (avec gestion des sauts de ligne comme on l'a vu)
                 if recette['description']:
                     story.append(Paragraph("Instructions :", styles['Heading2']))
-                    texte_propre = recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n')
-                    description_formatee = texte_propre.replace('\n', '<br/>')
+                    description_formatee = recette['description'].replace('\r\n', '\n').replace('\n', '<br/>')
                     story.append(Paragraph(description_formatee, styles['Normal']))
                 
-                # Ingrédients
                 story.append(Paragraph("Ingrédients :", styles['Heading2']))
                 cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (r_id,))
-                ingredients = cur.fetchall()
-                for ing in ingredients:
+                for ing in cur.fetchall():
                     q = ing['quantite'] if ing['quantite'] else ""
                     u = ing['unite'] if ing['unite'] else ""
                     story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-                
-                # Saut de page pour la recette suivante
                 story.append(PageBreak())
 
     doc.build(story)
@@ -324,86 +301,65 @@ def supprimer_recette(recette_id):
 @app.route('/recherche')
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
-    type_recherche = request.args.get('type_recherche', 'nom') # Récupère le choix du menu
+    type_recherche = request.args.get('type_recherche', 'nom')
     categorie = request.args.get('categorie', '')
     
     recettes = []
-    
-    if terme or categorie:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                # 1. On prépare la base de la requête
-                # On utilise DISTINCT pour éviter d'avoir 3 fois la même recette 
-                # si elle a 3 ingrédients qui correspondent au terme.
-                query = 'SELECT DISTINCT r.* FROM recettes r'
-                params = []
-                
-                # 2. On adapte la jointure et la condition selon le type de recherche
-                if type_recherche == 'ingredient':
-                    query += ' JOIN Ingredients i ON r.id = i.id_recette'
-                    condition_terme = "i.nom ILIKE %s"
-                elif type_recherche == 'sous_recette':
-                    query += ' JOIN Liaison_SousRecettes lsr ON r.id = lsr.id_recette_principale'
-                    query += ' JOIN recettes sr ON lsr.id_sous_recette = sr.id'
-                    condition_terme = "sr.nom ILIKE %s"
-                else:
-                    condition_terme = "r.nom ILIKE %s"
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            query = 'SELECT DISTINCT r.* FROM recettes r'
+            params = []
+            
+            if type_recherche == 'ingredient':
+                query += ' JOIN Ingredients i ON r.id = i.id_recette'
+                condition_terme = "i.nom ILIKE %s"
+            else:
+                condition_terme = "r.nom ILIKE %s"
 
-                # 3. Construction dynamique des filtres (Terme + Catégorie)
-                filters = []
-                if terme:
-                    filters.append(condition_terme)
-                    params.append(f'%{terme}%')
-                
-                if categorie:
-                    filters.append("r.categorie = %s")
-                    params.append(categorie)
+            filters = []
+            if terme:
+                filters.append(condition_terme)
+                params.append(f'%{terme}%')
+            if categorie:
+                filters.append("r.categorie = %s")
+                params.append(categorie)
 
-                if filters:
-                    query += " WHERE " + " AND ".join(filters)
-                
-                query += " ORDER BY r.nom ASC"
-                
-                cur.execute(query, tuple(params))
-                recettes = cur.fetchall()
+            if filters:
+                query += " WHERE " + " AND ".join(filters)
+            
+            query += " ORDER BY r.nom ASC"
+            cur.execute(query, tuple(params))
+            recettes = cur.fetchall()
 
     return render_template('recherche.html', 
                            recettes=recettes, 
                            terme=terme, 
                            type_recherche=type_recherche, 
-                           categorie=categorie)
+                           categorie=categorie,
+                           categories=recuperer_categories())
 
-# --- ROUTE LOGIN ---
+# --- LOGIN / LOGOUT ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Utilisation du nom de table 'users'
-                cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', 
-                           (username, password))
+                cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
                 user = cur.fetchone()
-        
         if user:
             session['logged_in'] = True
             session.permanent = True 
             return redirect(url_for('index'))
-        else:
-            flash('Identifiants incorrects', 'danger')
-            
+        flash('Identifiants incorrects', 'danger')
     return render_template('login.html')
 
-# --- FILTRE DE SÉCURITÉ ---
 @app.before_request
 def check_login():
-    # On laisse passer le login et les fichiers CSS/Images
     if request.endpoint not in ['login', 'static'] and not session.get('logged_in'):
         return redirect(url_for('login'))
 
-# --- LOGOUT ---
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
