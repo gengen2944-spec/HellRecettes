@@ -31,14 +31,13 @@ def get_db_connection():
     )
 
 def recuperer_categories():
-    """Récupère la liste des noms de catégories depuis la table de référence"""
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT nom FROM Categories ORDER BY nom ASC")
                 return [row['nom'] for row in cur.fetchall()]
     except Exception as e:
-        print(f"Erreur lors de la récupération des catégories : {e}")
+        print(f"Erreur catégories : {e}")
         return []
 
 # --- FONCTIONS UTILITAIRES ---
@@ -66,32 +65,26 @@ def get_sous_recettes_utilisees(recette_id):
 
 @app.route('/')
 def index():
-    # 1. Récupération des catégories depuis la table Categories
     ordre_categories = recuperer_categories()
-    
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM recettes ORDER BY nom ASC')
             toutes_les_recettes = cur.fetchall()
 
-    # 2. Organisation des recettes par catégorie
     recettes_par_categorie = {cat: [] for cat in ordre_categories}
     recettes_par_categorie['Divers'] = [] 
 
     for r in toutes_les_recettes:
         cat_recette = r['categorie'].strip() if r['categorie'] else ""
-        
         found = False
         for cat_fixe in ordre_categories:
             if cat_recette.lower() == cat_fixe.lower():
                 recettes_par_categorie[cat_fixe].append(r)
                 found = True
                 break
-        
         if not found:
             recettes_par_categorie['Divers'].append(r)
 
-    # 3. On ne garde que les catégories qui contiennent des recettes
     categories_a_afficher = [c for c in ordre_categories if recettes_par_categorie[c]]
     if recettes_par_categorie['Divers']:
         categories_a_afficher.append('Divers')
@@ -120,6 +113,9 @@ def ajouter_recette():
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
+                    # FIX: On laisse la DB gérer l'ID et on synchronise la séquence au cas où
+                    cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
+                    
                     cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
                                    VALUES (%s, %s, %s, %s) RETURNING id''', 
                                 (request.form.get('nom'), request.form.get('description'), 
@@ -196,8 +192,6 @@ def modifier_recette(recette_id):
                            categories=recuperer_categories(),
                            sous_recettes=get_sous_recettes_disponibles(), 
                            sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
-
-# --- ROUTES PDF ET RECHERCHE (Inchangées mais nettoyées) ---
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
