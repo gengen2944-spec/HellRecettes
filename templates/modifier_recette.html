@@ -2,21 +2,21 @@
 
 {% block content %}
 <div style="max-width: 900px; margin: 0 auto;">
-    <h1 style="text-align: center; color: #2e7d32; margin-bottom: 30px;">📝 Modifier la recette : {{ recette['nom'] }}</h1>
+    <h1 style="text-align: center; color: #e53935; margin-bottom: 30px;">📝 Modifier la recette : {{ recette['nom'] }}</h1>
 
     <form method="POST" action="{{ url_for('modifier_recette', recette_id=recette['id']) }}">
         
-        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; border-top: 5px solid #4CAF50;">
+        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 5px solid #72bf44;">
             <h2 style="margin-top: 0; font-size: 1.3em; color: #333; margin-bottom: 20px;">📝 Informations de base</h2>
             
             <div style="margin-bottom: 15px;">
-                <label for="nom" style="display: block; font-weight: bold; margin-bottom: 5px;">Nom de la recette :</label>
-                <input type="text" id="nom" name="nom" value="{{ recette['nom'] }}" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;" required>
+                <label for="nom" class="form-label-custom">Nom de la recette :</label>
+                <input type="text" id="nom" name="nom" value="{{ recette['nom'] }}" class="form-input-custom" required>
             </div>
 
             <div style="margin-bottom: 15px;">
-                <label for="categorie" style="display: block; font-weight: bold; margin-bottom: 5px;">Catégorie :</label>
-                <select id="categorie" name="categorie" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background-color: white;" required>
+                <label for="categorie" class="form-label-custom">Catégorie :</label>
+                <select id="categorie" name="categorie" class="form-input-custom" required>
                     {% for cat in categories %}
                         <option value="{{ cat }}" {% if recette['categorie'] == cat %}selected{% endif %}>{{ cat }}</option>
                     {% endfor %}
@@ -24,73 +24,74 @@
             </div>
 
             <div style="margin-bottom: 15px;">
-                <label style="display: flex; align-items: center; cursor: pointer; background: #f1f8e9; padding: 10px; border-radius: 6px;">
+                <label style="display: flex; align-items: center; cursor: pointer; background: #f1f8e9; padding: 12px; border-radius: 8px; border: 1px dashed #72bf44;">
                     <input type="checkbox" id="est_sous_recette" name="est_sous_recette" style="width: 20px; height: 20px; margin-right: 15px;" {% if recette['est_sous_recette'] %}checked{% endif %}>
-                    <span style="font-weight: bold; color: #2e7d32;">C'est une sous-recette (ex: une sauce ou une base)</span>
+                    <span style="font-weight: bold; color: #2d3436;">C'est une sous-recette (ex: une sauce ou une base)</span>
                 </label>
             </div>
             
             <div>
-                <label for="description" style="display: block; font-weight: bold; margin-bottom: 5px;">Instructions / Description :</label>
-                <textarea id="description" name="description" style="width: 100%; height: 150px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit;">{{ recette['description'] }}</textarea>
+                <label for="description" class="form-label-custom">Instructions / Description :</label>
+                <textarea id="description" name="description" class="form-textarea-custom">{{ recette['description'] }}</textarea>
             </div>
         </div>
 
-        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; border-top: 5px solid #2196F3;">
+        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 25px; border-top: 5px solid #2196F3;">
             <h2 style="margin-top: 0; font-size: 1.3em; color: #333; margin-bottom: 20px;">🍎 Ingrédients</h2>
             <div id="ingredients">
                 {% for ing in ingredients %}
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px;">
-                    <input type="text" name="ingredient_nom[]" value="{{ ing['nom'] }}" placeholder="Nom" style="flex: 3; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" required>
-                    <input type="text" name="ingredient_quantite[]" value="{{ ing['quantite'] if ing['quantite'] else '' }}" placeholder="Qté" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                    <select name="ingredient_unite[]" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <input type="text" name="ingredient_nom[]" value="{{ ing['nom'] }}" placeholder="Nom" class="form-input-custom" style="flex: 3; margin: 0;" required>
+                    <input type="text" name="ingredient_quantite[]" value="{{ ing['quantite'] if ing['quantite'] else '' }}" placeholder="Qté" class="form-input-custom" style="flex: 1; margin: 0;">
+                    <select name="ingredient_unite[]" class="form-input-custom" style="flex: 1; margin: 0;">
                         <option value="">unité</option>
                         {% for u in ['', 'g', 'Kg', 'Pièce', 'PM', 'L', 'cl', 'C. à Soupe', 'C. à Café'] %}
                             <option value="{{ u }}" {% if ing['unite'] == u %}selected{% endif %}>{{ u if u else 'unité' }}</option>
                         {% endfor %}
                     </select>
-                    <button type="button" onclick="this.parentElement.remove()" style="padding: 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>
+                    <button type="button" onclick="this.parentElement.remove()" style="padding: 10px 15px; background-color: #e53935; color: white; border: none; border-radius: 8px; cursor: pointer;">✕</button>
                 </div>
                 {% endfor %}
             </div>
-            <button type="button" onclick="ajouterIngredient()" style="margin-top: 15px; padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+            <button type="button" onclick="ajouterIngredient()" style="margin-top: 15px; padding: 12px 20px; background-color: #2196F3; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; transition: 0.2s;">
                 ➕ Ajouter un ingrédient
             </button>
         </div>
 
-        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 40px; border-top: 5px solid #FF9800;">
+        <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 40px; border-top: 5px solid #FF9800;">
             <h2 style="margin-top: 0; font-size: 1.3em; color: #333; margin-bottom: 20px;">🔗 Sous-recettes liées</h2>
             <div id="sous-recettes" style="margin-bottom: 15px;">
                 {% for sr in sous_recettes_utilisees %}
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #e3f2fd; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #2196F3;">
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff3e0; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #FF9800;">
                     <span style="font-weight: 500;">{{ sr['nom'] }}</span>
                     <input type="hidden" name="sous_recette_id[]" value="{{ sr['id'] }}">
-                    <button type="button" onclick="this.parentElement.remove()" style="padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Supprimer</button>
+                    <button type="button" onclick="this.parentElement.remove()" style="padding: 5px 12px; background-color: #e53935; color: white; border: none; border-radius: 6px; cursor: pointer;">Supprimer</button>
                 </div>
                 {% endfor %}
             </div>
 
-            <div id="selection-zone" style="background: #fff3e0; padding: 15px; border-radius: 8px; display: none; margin-bottom: 15px;">
-                <select id="sous-recette-select" style="width: 100%; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+            <div id="selection-zone" style="background: #fdfdfd; padding: 20px; border: 1px solid #FF9800; border-radius: 12px; display: none; margin-bottom: 15px;">
+                <label class="form-label-custom">Choisir une sous-recette :</label>
+                <select id="sous-recette-select" class="form-input-custom">
                     {% for sr in sous_recettes %}
                         <option value="{{ sr['id'] }}">{{ sr['nom'] }}</option>
                     {% endfor %}
                 </select>
-                <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="ajouterSousRecette()" style="flex: 1; padding: 10px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">Valider l'ajout</button>
-                    <button type="button" onclick="document.getElementById('selection-zone').style.display='none'" style="flex: 1; padding: 10px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;">Annuler</button>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="button" onclick="ajouterSousRecette()" style="flex: 1; padding: 12px; background-color: #72bf44; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold;">Valider l'ajout</button>
+                    <button type="button" onclick="document.getElementById('selection-zone').style.display='none'" style="flex: 1; padding: 12px; background-color: #6c757d; color: white; border: none; border-radius: 50px; cursor: pointer;">Annuler</button>
                 </div>
             </div>
             
-            <button type="button" onclick="document.getElementById('selection-zone').style.display='block'" style="padding: 10px 20px; background-color: #FF9800; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+            <button type="button" onclick="document.getElementById('selection-zone').style.display='block'" style="padding: 12px 25px; background-color: #FF9800; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold;">
                 🔗 Lier une sous-recette
             </button>
         </div>
 
         <div style="text-align: center; margin-bottom: 50px; display: flex; justify-content: center; gap: 20px;">
-            <a href="{{ url_for('index') }}" style="text-decoration: none; padding: 15px 30px; background: #6c757d; color: white; border-radius: 50px; font-weight: bold;">Annuler</a>
-            <button type="submit" style="padding: 15px 40px; background-color: #4CAF50; color: white; border: none; border-radius: 50px; cursor: pointer; font-size: 1.2em; font-weight: bold; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);">
-                💾 Mettre à jour la Recette
+            <a href="{{ url_for('afficher_recette', recette_id=recette['id']) }}" style="text-decoration: none; padding: 15px 35px; background: #6c757d; color: white; border-radius: 50px; font-weight: bold;">Annuler</a>
+            <button type="submit" style="padding: 15px 45px; background-color: #72bf44; color: white; border: none; border-radius: 50px; cursor: pointer; font-size: 1.1em; font-weight: bold; box-shadow: 0 4px 15px rgba(114, 191, 68, 0.3);">
+                💾 Enregistrer les modifications
             </button>
         </div>
     </form>
@@ -101,9 +102,9 @@
         const div = document.createElement('div');
         div.style = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 8px;';
         div.innerHTML = `
-            <input type="text" name="ingredient_nom[]" placeholder="Nom" style="flex: 3; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" required>
-            <input type="text" name="ingredient_quantite[]" placeholder="Qté" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-            <select name="ingredient_unite[]" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="text" name="ingredient_nom[]" placeholder="Nom" class="form-input-custom" style="flex: 3; margin:0;" required>
+            <input type="text" name="ingredient_quantite[]" placeholder="Qté" class="form-input-custom" style="flex: 1; margin:0;">
+            <select name="ingredient_unite[]" class="form-input-custom" style="flex: 1; margin:0;">
                 <option value="">unité</option>
                 <option value="g">g</option>
                 <option value="Kg">Kg</option>
@@ -114,7 +115,7 @@
                 <option value="C. à Soupe">C. à Soupe</option>
                 <option value="C. à Café">C. à Café</option>
             </select>
-            <button type="button" onclick="this.parentElement.remove()" style="padding: 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">✕</button>
+            <button type="button" onclick="this.parentElement.remove()" style="padding: 10px 15px; background-color: #e53935; color: white; border: none; border-radius: 8px; cursor: pointer;">✕</button>
         `;
         document.getElementById('ingredients').appendChild(div);
     }
@@ -125,11 +126,11 @@
         const nom = select.options[select.selectedIndex].text;
 
         const div = document.createElement('div');
-        div.style = 'display: flex; justify-content: space-between; align-items: center; background: #e3f2fd; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #2196F3;';
+        div.style = 'display: flex; justify-content: space-between; align-items: center; background: #fff3e0; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #FF9800;';
         div.innerHTML = `
             <span style="font-weight: 500;">${nom}</span>
             <input type="hidden" name="sous_recette_id[]" value="${id}">
-            <button type="button" onclick="this.parentElement.remove()" style="padding: 5px 10px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Supprimer</button>
+            <button type="button" onclick="this.parentElement.remove()" style="padding: 5px 12px; background-color: #e53935; color: white; border: none; border-radius: 6px; cursor: pointer;">Supprimer</button>
         `;
         document.getElementById('sous-recettes').appendChild(div);
         document.getElementById('selection-zone').style.display = 'none';

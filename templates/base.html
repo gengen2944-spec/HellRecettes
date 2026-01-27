@@ -101,6 +101,43 @@
             margin: 0 auto;
             padding: 0 20px;
         }
+
+        /* --- STYLE DES FORMULAIRES (HOMOGÉNÉITÉ) --- */
+        .form-input-custom, .form-textarea-custom {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ced4da;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 1.1rem; /* Taille plus lisible pour la description */
+            color: #333;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+            margin-bottom: 15px;
+        }
+
+        .form-textarea-custom {
+            min-height: 250px;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        /* Effet au focus : bordure verte pour rappeler le logo */
+        .form-input-custom:focus, .form-textarea-custom:focus {
+            border-color: #72bf44;
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(114, 191, 68, 0.1);
+        }
+
+        .form-label-custom {
+            font-weight: 600;
+            color: #444;
+            font-size: 0.95rem;
+            display: block;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
