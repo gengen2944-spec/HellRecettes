@@ -113,7 +113,7 @@ def ajouter_recette():
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    # FIX: On laisse la DB gérer l'ID et on synchronise la séquence au cas où
+                    # Sync séquence Recettes
                     cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
                     
                     cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
@@ -121,6 +121,9 @@ def ajouter_recette():
                                 (request.form.get('nom'), request.form.get('description'), 
                                  request.form.get('categorie'), est_sous))
                     recette_id = cur.fetchone()['id']
+
+                    # Sync séquence Ingredients
+                    cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
 
                     noms = request.form.getlist('ingredient_nom[]')
                     quants = request.form.getlist('ingredient_quantite[]')
@@ -155,11 +158,15 @@ def modifier_recette(recette_id):
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
+                    # 1. Mise à jour de la recette
                     cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
                                    WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
                                                     request.form.get('categorie'), est_sous, recette_id))
 
+                    # 2. Reset et Sync Ingrédients
                     cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
+                    cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
+
                     for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
                                        request.form.getlist('ingredient_quantite[]'), 
                                        request.form.getlist('ingredient_unite[]')):
@@ -171,7 +178,13 @@ def modifier_recette(recette_id):
                             cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
                                          (recette_id, n, q_val, u))
 
+                    # 3. Reset et Sync Sous-Recettes
                     cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
+                    try:
+                        cur.execute("SELECT setval(pg_get_serial_sequence('sousrecettesutilisees', 'id'), coalesce(max(id), 0) + 1, false) FROM sousrecettesutilisees")
+                    except:
+                        pass
+
                     for s_id in request.form.getlist('sous_recette_id[]'):
                         if s_id:
                             cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
@@ -192,6 +205,8 @@ def modifier_recette(recette_id):
                            categories=recuperer_categories(),
                            sous_recettes=get_sous_recettes_disponibles(), 
                            sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
+
+# --- ROUTES PDF, RECHERCHE, SUPPRESSION ET AUTH (Inchangées) ---
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
@@ -332,7 +347,6 @@ def rechercher_recette():
                            categorie=categorie,
                            categories=recuperer_categories())
 
-# --- LOGIN / LOGOUT ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
