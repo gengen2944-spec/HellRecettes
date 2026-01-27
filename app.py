@@ -13,7 +13,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'EmmaLiam29!') 
 app.permanent_session_lifetime = timedelta(days=31)
 
-# Correction de l'URL pour Render/PostgreSQL
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -110,42 +109,46 @@ def afficher_recette(recette_id):
 def ajouter_recette():
     if request.method == 'POST':
         est_sous = 'est_sous_recette' in request.form
+        conn = None
         try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    # Sync séquence Recettes
-                    cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
-                    
-                    cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
-                                   VALUES (%s, %s, %s, %s) RETURNING id''', 
-                                (request.form.get('nom'), request.form.get('description'), 
-                                 request.form.get('categorie'), est_sous))
-                    recette_id = cur.fetchone()['id']
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                # Sync séquence
+                cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
+                
+                cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
+                               VALUES (%s, %s, %s, %s) RETURNING id''', 
+                            (request.form.get('nom'), request.form.get('description'), 
+                             request.form.get('categorie'), est_sous))
+                recette_id = cur.fetchone()['id']
 
-                    # Sync séquence Ingredients
-                    cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
+                cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
+                
+                noms = request.form.getlist('ingredient_nom[]')
+                quants = request.form.getlist('ingredient_quantite[]')
+                unites = request.form.getlist('ingredient_unite[]')
 
-                    noms = request.form.getlist('ingredient_nom[]')
-                    quants = request.form.getlist('ingredient_quantite[]')
-                    unites = request.form.getlist('ingredient_unite[]')
-
-                    for n, q, u in zip(noms, quants, unites):
-                        if n.strip():
-                            try:
-                                q_val = float(q.replace(',', '.')) if q and q.strip() else None
-                            except ValueError:
-                                q_val = None
-                            cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
-                                           VALUES (%s, %s, %s, %s)''', (recette_id, n, q_val, u))
-                    
-                    for s_id in request.form.getlist('sous_recette_id[]'):
-                        if s_id:
-                            cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                        (recette_id, s_id))
-                conn.commit()
+                for n, q, u in zip(noms, quants, unites):
+                    if n.strip():
+                        try:
+                            q_val = float(q.replace(',', '.')) if q and q.strip() else None
+                        except ValueError:
+                            q_val = None
+                        cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
+                                       VALUES (%s, %s, %s, %s)''', (recette_id, n, q_val, u))
+                
+                for s_id in request.form.getlist('sous_recette_id[]'):
+                    if s_id:
+                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
+                                    (recette_id, s_id))
+                
+                conn.commit() # Validation explicite
             return redirect(url_for('index'))
         except Exception as e:
+            if conn: conn.rollback()
             return f"Erreur lors de l'ajout : {str(e)}"
+        finally:
+            if conn: conn.close()
 
     return render_template('ajouter.html', 
                            categories=recuperer_categories(), 
@@ -155,44 +158,44 @@ def ajouter_recette():
 def modifier_recette(recette_id):
     if request.method == 'POST':
         est_sous = 'est_sous_recette' in request.form
+        conn = None
         try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    # 1. Mise à jour de la recette
-                    cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
-                                   WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
-                                                    request.form.get('categorie'), est_sous, recette_id))
+            conn = get_db_connection()
+            with conn.cursor() as cur:
+                # 1. Update Recette
+                cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
+                               WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
+                                                request.form.get('categorie'), est_sous, recette_id))
 
-                    # 2. Reset et Sync Ingrédients
-                    cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-                    cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
+                # 2. Ingrédients
+                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
+                cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
 
-                    for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
-                                       request.form.getlist('ingredient_quantite[]'), 
-                                       request.form.getlist('ingredient_unite[]')):
-                        if n.strip():
-                            try:
-                                q_val = float(q.replace(',', '.')) if q and q.strip() else None
-                            except ValueError:
-                                q_val = None
-                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
-                                         (recette_id, n, q_val, u))
+                for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
+                                   request.form.getlist('ingredient_quantite[]'), 
+                                   request.form.getlist('ingredient_unite[]')):
+                    if n.strip():
+                        try:
+                            q_val = float(q.replace(',', '.')) if q and q.strip() else None
+                        except ValueError:
+                            q_val = None
+                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
+                                     (recette_id, n, q_val, u))
 
-                    # 3. Reset et Sync Sous-Recettes
-                    cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
-                    try:
-                        cur.execute("SELECT setval(pg_get_serial_sequence('sousrecettesutilisees', 'id'), coalesce(max(id), 0) + 1, false) FROM sousrecettesutilisees")
-                    except:
-                        pass
-
-                    for s_id in request.form.getlist('sous_recette_id[]'):
-                        if s_id:
-                            cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                        (recette_id, s_id))
-                conn.commit()
+                # 3. Sous-Recettes
+                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
+                for s_id in request.form.getlist('sous_recette_id[]'):
+                    if s_id:
+                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
+                                    (recette_id, s_id))
+                
+                conn.commit() # IMPORTANT : Assure l'écriture en base
             return redirect(url_for('afficher_recette', recette_id=recette_id))
         except Exception as e:
+            if conn: conn.rollback()
             return f"Erreur modification : {str(e)}"
+        finally:
+            if conn: conn.close()
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -206,7 +209,9 @@ def modifier_recette(recette_id):
                            sous_recettes=get_sous_recettes_disponibles(), 
                            sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
 
-# --- ROUTES PDF, RECHERCHE, SUPPRESSION ET AUTH (Inchangées) ---
+# --- PDF, RECHERCHE, SUPPRESSION ET AUTH ---
+
+
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
@@ -296,15 +301,19 @@ def imprimer_book():
 
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
 def supprimer_recette(recette_id):
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (recette_id, recette_id))
-                cur.execute('DELETE FROM Recettes WHERE id = %s', (recette_id,))
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
+            cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (recette_id, recette_id))
+            cur.execute('DELETE FROM Recettes WHERE id = %s', (recette_id,))
             conn.commit()
     except Exception as e:
+        if conn: conn.rollback()
         print(f"Erreur suppression : {e}")
+    finally:
+        if conn: conn.close()
     return redirect(url_for('index'))
 
 @app.route('/recherche')
