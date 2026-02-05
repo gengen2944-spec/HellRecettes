@@ -71,7 +71,7 @@ def ajouter_bloc_recette(cur, story, styles, data_recette, est_principal=True):
     
     if data_recette['description']:
         story.append(Paragraph("Instructions :", styles['Heading2']))
-        # Nettoyage des sauts de ligne pour un rendu propre en PDF
+        # Nettoyage profond des sauts de ligne pour éviter les blocs écrasés
         texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n').replace('\r\n', '\n')
         description_formatee = texte_propre.replace('\n', '<br/>')
         story.append(Paragraph(description_formatee, styles['Normal']))
@@ -88,7 +88,6 @@ def ajouter_bloc_recette(cur, story, styles, data_recette, est_principal=True):
     
     story.append(Spacer(1, 24))
     if not est_principal:
-        # Petit séparateur visuel pour les sous-recettes
         story.append(Paragraph("<hr color='lightgrey' width='50%'/>", styles['Normal']))
         story.append(Spacer(1, 24))
 
@@ -146,33 +145,26 @@ def ajouter_recette():
             conn = get_db_connection()
             with conn.cursor() as cur:
                 cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
-                
                 cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
                                VALUES (%s, %s, %s, %s) RETURNING id''', 
                             (request.form.get('nom'), request.form.get('description'), 
                              request.form.get('categorie'), est_sous))
                 recette_id = cur.fetchone()['id']
-
                 cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
                 
-                noms = request.form.getlist('ingredient_nom[]')
-                quants = request.form.getlist('ingredient_quantite[]')
-                unites = request.form.getlist('ingredient_unite[]')
-
-                for n, q, u in zip(noms, quants, unites):
+                for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
+                                   request.form.getlist('ingredient_quantite[]'), 
+                                   request.form.getlist('ingredient_unite[]')):
                     if n.strip():
                         try:
                             q_val = float(q.replace(',', '.')) if q and q.strip() else None
                         except ValueError:
                             q_val = None
-                        cur.execute('''INSERT INTO Ingredients (id_recette, nom, quantite, unite) 
-                                       VALUES (%s, %s, %s, %s)''', (recette_id, n, q_val, u))
+                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q_val, u))
                 
                 for s_id in request.form.getlist('sous_recette_id[]'):
                     if s_id:
-                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                    (recette_id, s_id))
-                
+                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
                 conn.commit()
             return redirect(url_for('index'))
         except Exception as e:
@@ -180,10 +172,7 @@ def ajouter_recette():
             return f"Erreur lors de l'ajout : {str(e)}"
         finally:
             if conn: conn.close()
-
-    return render_template('ajouter.html', 
-                           categories=recuperer_categories(), 
-                           sous_recettes=get_sous_recettes_disponibles())
+    return render_template('ajouter.html', categories=recuperer_categories(), sous_recettes=get_sous_recettes_disponibles())
 
 @app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
 def modifier_recette(recette_id):
@@ -196,10 +185,7 @@ def modifier_recette(recette_id):
                 cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
                                WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
                                                 request.form.get('categorie'), est_sous, recette_id))
-
                 cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-                cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
-
                 for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
                                    request.form.getlist('ingredient_quantite[]'), 
                                    request.form.getlist('ingredient_unite[]')):
@@ -208,15 +194,11 @@ def modifier_recette(recette_id):
                             q_val = float(q.replace(',', '.')) if q and q.strip() else None
                         except ValueError:
                             q_val = None
-                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
-                                     (recette_id, n, q_val, u))
-
+                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q_val, u))
                 cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
                 for s_id in request.form.getlist('sous_recette_id[]'):
                     if s_id:
-                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
-                                    (recette_id, s_id))
-                
+                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
                 conn.commit()
             return redirect(url_for('afficher_recette', recette_id=recette_id))
         except Exception as e:
@@ -224,17 +206,13 @@ def modifier_recette(recette_id):
             return f"Erreur modification : {str(e)}"
         finally:
             if conn: conn.close()
-
+    
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette = cur.fetchone()
-            
-    return render_template('modifier_recette.html', 
-                           recette=recette, 
-                           ingredients=get_ingredients(recette_id), 
-                           categories=recuperer_categories(),
-                           sous_recettes=get_sous_recettes_disponibles(), 
+    return render_template('modifier_recette.html', recette=recette, ingredients=get_ingredients(recette_id), 
+                           categories=recuperer_categories(), sous_recettes=get_sous_recettes_disponibles(), 
                            sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
 
 # --- ROUTES D'IMPRESSION PDF ---
@@ -245,7 +223,6 @@ def imprimer_recette(recette_id):
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette_principale = cur.fetchone()
-            
             cur.execute('''SELECT r.* FROM Recettes r
                            JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
                            WHERE s.id_recette = %s''', (recette_id,))
@@ -263,6 +240,7 @@ def imprimer_recette(recette_id):
             doc.build(story)
             buffer.seek(0)
             nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
+            # as_attachment=False permet l'ouverture dans l'onglet via target="_blank"
             return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{nom_fichier}.pdf")
 
 @app.route('/imprimer-book', methods=['POST'])
@@ -282,9 +260,7 @@ def imprimer_book():
             for r_id in ids_selectionnes:
                 cur.execute('SELECT * FROM recettes WHERE id = %s', (r_id,))
                 recette = cur.fetchone()
-                
                 if recette:
-                    # On cherche les sous-recettes pour chaque recette du book
                     cur.execute('''SELECT r.* FROM Recettes r
                                    JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
                                    WHERE s.id_recette = %s''', (r_id,))
@@ -293,12 +269,12 @@ def imprimer_book():
                     ajouter_bloc_recette(cur, story, styles, recette, est_principal=True)
                     for sr in sous_recettes:
                         ajouter_bloc_recette(cur, story, styles, sr, est_principal=False)
-                    
                     story.append(PageBreak())
 
     doc.build(story)
     buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name="Mon_Livre_de_Recettes.pdf")
+    # as_attachment=False est crucial ici pour l'affichage direct
+    return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name="Mon_Livre_de_Recettes.pdf")
 
 # --- RECHERCHE ET GESTION ---
 
@@ -314,7 +290,6 @@ def supprimer_recette(recette_id):
             conn.commit()
     except Exception as e:
         if conn: conn.rollback()
-        print(f"Erreur suppression : {e}")
     finally:
         if conn: conn.close()
     return redirect(url_for('index'))
@@ -324,19 +299,15 @@ def rechercher_recette():
     terme = request.args.get('terme', '').strip()
     type_recherche = request.args.get('type_recherche', 'nom')
     categorie = request.args.get('categorie', '')
-    
-    recettes = []
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             query = 'SELECT DISTINCT r.* FROM recettes r'
             params = []
-            
             if type_recherche == 'ingredient':
                 query += ' JOIN Ingredients i ON r.id = i.id_recette'
                 condition_terme = "i.nom ILIKE %s"
             else:
                 condition_terme = "r.nom ILIKE %s"
-
             filters = []
             if terme:
                 filters.append(condition_terme)
@@ -344,20 +315,13 @@ def rechercher_recette():
             if categorie:
                 filters.append("r.categorie = %s")
                 params.append(categorie)
-
             if filters:
                 query += " WHERE " + " AND ".join(filters)
-            
             query += " ORDER BY r.nom ASC"
             cur.execute(query, tuple(params))
             recettes = cur.fetchall()
-
-    return render_template('recherche.html', 
-                           recettes=recettes, 
-                           terme=terme, 
-                           type_recherche=type_recherche, 
-                           categorie=categorie,
-                           categories=recuperer_categories())
+    return render_template('recherche.html', recettes=recettes, terme=terme, 
+                           type_recherche=type_recherche, categorie=categorie, categories=recuperer_categories())
 
 # --- AUTHENTIFICATION ---
 

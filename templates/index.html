@@ -23,7 +23,7 @@
     </form>
 </div>
 
-<form action="{{ url_for('imprimer_book') }}" method="POST" id="form-book">
+<form action="{{ url_for('imprimer_book') }}" method="POST" id="form-book" target="_blank">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
         
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -35,8 +35,8 @@
         </div>
         
         <div style="display: flex; gap: 12px;">
-            <button type="button" id="btn-toggle-all" onclick="toggleAll()" style="padding: 10px 20px; background-color: #2d3436; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: 600;">
-                <span>✓</span> Tout cocher
+            <button type="button" id="btn-toggle-all" onclick="toggleAll()" style="padding: 10px 20px; background-color: #2d3436; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: 600; min-width: 180px;">
+                Tout sélectionner
             </button>
             
             <button type="submit" style="padding: 10px 25px; background-color: #e53935; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(229, 57, 53, 0.2);">
@@ -71,10 +71,23 @@
 <script>
 function toggleAll() {
     const checkboxes = document.querySelectorAll('.recette-checkbox');
+    const btn = document.getElementById('btn-toggle-all');
+    
+    // Vérifie si TOUTES les cases sont actuellement cochées
     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
     checkboxes.forEach(cb => {
+        // Si tout est coché -> on décoche tout
+        // Sinon -> on coche tout (ce qui reste)
         cb.checked = !allChecked;
     });
+
+    // Mise à jour du texte du bouton selon l'action effectuée
+    if (allChecked) {
+        btn.innerText = "Tout sélectionner";
+    } else {
+        btn.innerText = "Tout désélectionner";
+    }
 }
 </script>
 {% endblock %}
