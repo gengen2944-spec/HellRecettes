@@ -40,6 +40,7 @@ def recuperer_categories():
         return []
 
 # --- FONCTIONS UTILITAIRES ---
+
 def get_ingredients(recette_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -60,7 +61,38 @@ def get_sous_recettes_utilisees(recette_id):
                            WHERE s.id_recette = %s''', (recette_id,))
             return cur.fetchall()
 
-# --- ROUTES ---
+# --- LOGIQUE D'IMPRESSION MUTUALISÉE ---
+
+def ajouter_bloc_recette(cur, story, styles, data_recette, est_principal=True):
+    """Génère le contenu PDF pour une recette donnée (Principale ou Sous-recette)"""
+    titre_style = styles['Title'] if est_principal else styles['Heading1']
+    story.append(Paragraph(data_recette['nom'], titre_style))
+    story.append(Spacer(1, 12))
+    
+    if data_recette['description']:
+        story.append(Paragraph("Instructions :", styles['Heading2']))
+        # Nettoyage des sauts de ligne pour un rendu propre en PDF
+        texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n').replace('\r\n', '\n')
+        description_formatee = texte_propre.replace('\n', '<br/>')
+        story.append(Paragraph(description_formatee, styles['Normal']))
+        story.append(Spacer(1, 12))
+    
+    story.append(Paragraph("Ingrédients :", styles['Heading2']))
+    cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
+    ingredients = cur.fetchall()
+    
+    for ing in ingredients:
+        q = ing['quantite'] if ing['quantite'] else ""
+        u = ing['unite'] if ing['unite'] else ""
+        story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
+    
+    story.append(Spacer(1, 24))
+    if not est_principal:
+        # Petit séparateur visuel pour les sous-recettes
+        story.append(Paragraph("<hr color='lightgrey' width='50%'/>", styles['Normal']))
+        story.append(Spacer(1, 24))
+
+# --- ROUTES PRINCIPALES ---
 
 @app.route('/')
 def index():
@@ -113,7 +145,6 @@ def ajouter_recette():
         try:
             conn = get_db_connection()
             with conn.cursor() as cur:
-                # Sync séquence
                 cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
                 
                 cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
@@ -142,7 +173,7 @@ def ajouter_recette():
                         cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
                                     (recette_id, s_id))
                 
-                conn.commit() # Validation explicite
+                conn.commit()
             return redirect(url_for('index'))
         except Exception as e:
             if conn: conn.rollback()
@@ -162,12 +193,10 @@ def modifier_recette(recette_id):
         try:
             conn = get_db_connection()
             with conn.cursor() as cur:
-                # 1. Update Recette
                 cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
                                WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
                                                 request.form.get('categorie'), est_sous, recette_id))
 
-                # 2. Ingrédients
                 cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
                 cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
 
@@ -182,14 +211,13 @@ def modifier_recette(recette_id):
                         cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', 
                                      (recette_id, n, q_val, u))
 
-                # 3. Sous-Recettes
                 cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
                 for s_id in request.form.getlist('sous_recette_id[]'):
                     if s_id:
                         cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', 
                                     (recette_id, s_id))
                 
-                conn.commit() # IMPORTANT : Assure l'écriture en base
+                conn.commit()
             return redirect(url_for('afficher_recette', recette_id=recette_id))
         except Exception as e:
             if conn: conn.rollback()
@@ -209,9 +237,7 @@ def modifier_recette(recette_id):
                            sous_recettes=get_sous_recettes_disponibles(), 
                            sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
 
-# --- PDF, RECHERCHE, SUPPRESSION ET AUTH ---
-
-
+# --- ROUTES D'IMPRESSION PDF ---
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
@@ -219,56 +245,31 @@ def imprimer_recette(recette_id):
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
             recette_principale = cur.fetchone()
+            
             cur.execute('''SELECT r.* FROM Recettes r
                            JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
                            WHERE s.id_recette = %s''', (recette_id,))
             sous_recettes = cur.fetchall()
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles = getSampleStyleSheet()
-    story = []
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            styles = getSampleStyleSheet()
+            story = []
 
-    def ajouter_bloc_recette(data_recette, est_principal=True):
-        titre_style = styles['Title'] if est_principal else styles['Heading1']
-        story.append(Paragraph(data_recette['nom'], titre_style))
-        story.append(Spacer(1, 12))
-        
-        if data_recette['description']:
-            story.append(Paragraph("Instructions :", styles['Heading2']))
-            texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n')
-            description_formatee = texte_propre.replace('\n', '<br/>')
-            story.append(Paragraph(description_formatee, styles['Normal']))
-            story.append(Spacer(1, 12))
-        
-        story.append(Paragraph("Ingrédients :", styles['Heading2']))
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
-                ingredients = cur.fetchall()
-        
-        for ing in ingredients:
-            q = ing['quantite'] if ing['quantite'] else ""
-            u = ing['unite'] if ing['unite'] else ""
-            story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-        
-        story.append(Spacer(1, 24))
-        story.append(Paragraph("<hr/>", styles['Normal']))
-        story.append(Spacer(1, 24))
-
-    ajouter_bloc_recette(recette_principale, est_principal=True)
-    for sr in sous_recettes:
-        ajouter_bloc_recette(sr, est_principal=False)
-    
-    doc.build(story)
-    buffer.seek(0)
-    nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
-    return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{nom_fichier}.pdf")
+            ajouter_bloc_recette(cur, story, styles, recette_principale, est_principal=True)
+            for sr in sous_recettes:
+                ajouter_bloc_recette(cur, story, styles, sr, est_principal=False)
+            
+            doc.build(story)
+            buffer.seek(0)
+            nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
+            return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{nom_fichier}.pdf")
 
 @app.route('/imprimer-book', methods=['POST'])
 def imprimer_book():
     ids_selectionnes = request.form.getlist('selection')
     if not ids_selectionnes:
+        flash("Aucune recette sélectionnée", "warning")
         return redirect(url_for('index'))
 
     buffer = BytesIO()
@@ -281,23 +282,25 @@ def imprimer_book():
             for r_id in ids_selectionnes:
                 cur.execute('SELECT * FROM recettes WHERE id = %s', (r_id,))
                 recette = cur.fetchone()
-                story.append(Paragraph(recette['nom'], styles['Title']))
-                if recette['description']:
-                    story.append(Paragraph("Instructions :", styles['Heading2']))
-                    description_formatee = recette['description'].replace('\r\n', '\n').replace('\n', '<br/>')
-                    story.append(Paragraph(description_formatee, styles['Normal']))
                 
-                story.append(Paragraph("Ingrédients :", styles['Heading2']))
-                cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (r_id,))
-                for ing in cur.fetchall():
-                    q = ing['quantite'] if ing['quantite'] else ""
-                    u = ing['unite'] if ing['unite'] else ""
-                    story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-                story.append(PageBreak())
+                if recette:
+                    # On cherche les sous-recettes pour chaque recette du book
+                    cur.execute('''SELECT r.* FROM Recettes r
+                                   JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
+                                   WHERE s.id_recette = %s''', (r_id,))
+                    sous_recettes = cur.fetchall()
+
+                    ajouter_bloc_recette(cur, story, styles, recette, est_principal=True)
+                    for sr in sous_recettes:
+                        ajouter_bloc_recette(cur, story, styles, sr, est_principal=False)
+                    
+                    story.append(PageBreak())
 
     doc.build(story)
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', download_name="Mon_Livre_de_Recettes.pdf")
+
+# --- RECHERCHE ET GESTION ---
 
 @app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
 def supprimer_recette(recette_id):
@@ -355,6 +358,8 @@ def rechercher_recette():
                            type_recherche=type_recherche, 
                            categorie=categorie,
                            categories=recuperer_categories())
+
+# --- AUTHENTIFICATION ---
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
