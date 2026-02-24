@@ -114,7 +114,7 @@ def afficher_recette(recette_id):
 # --- GESTION DES RECETTES (CRUD) ---
 
 @app.route('/ajouter', methods=['GET', 'POST'])
-def ajouter_recette():
+def ajouter_recette():  # <-- Nommé pour correspondre à url_for('ajouter_recette')
     if request.method == 'POST':
         nom = request.form.get('nom')
         categorie = request.form.get('categorie')
@@ -151,7 +151,7 @@ def ajouter_recette():
     return render_template('ajouter.html', toutes_recettes=toutes_recettes)
 
 @app.route('/modifier/<int:recette_id>', methods=['GET', 'POST'])
-def modifier_recette(recette_id):
+def modifier_recette(recette_id):  # <-- Nommé pour correspondre à url_for('modifier_recette')
     if request.method == 'POST':
         nom = request.form.get('nom')
         categorie = request.form.get('categorie')
