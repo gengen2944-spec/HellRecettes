@@ -75,7 +75,8 @@ def logout():
 @app.route('/')
 def index():
     try:
-        ordre_categories = ['ENTREES', 'PLATS', 'DESSERTS', 'BOULANGERIE', 'DIVERS']
+        # Mise à jour de l'ordre d'affichage selon tes catégories
+        ordre_categories = ['Entrées/Plat', 'A picorer', 'Desserts', 'Sauce/Marinade/Condiments', 'DIVERS']
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute('SELECT * FROM Recettes ORDER BY nom')
@@ -86,9 +87,12 @@ def index():
             cat = r['categorie'] or "DIVERS"
             cats_base.add(cat)
             recettes_par_categorie.setdefault(cat, []).append(r)
+        
+        # Ajout des catégories existantes en base non listées dans l'ordre par défaut
         for c in cats_base:
             if c not in ordre_categories:
                 ordre_categories.append(c)
+                
         return render_template('index.html', recettes_par_categorie=recettes_par_categorie, ordre_categories=ordre_categories)
     except Exception as e:
         return f"Erreur index : {str(e)}"
@@ -144,7 +148,8 @@ def ajouter_recette():
         except Exception as e:
             flash(f"Erreur : {e}", "danger")
 
-    categories = ['ENTREES', 'PLATS', 'DESSERTS', 'BOULANGERIE', 'DIVERS']
+    # Liste des catégories mise à jour pour le formulaire d'ajout
+    categories = ['Entrées/Plat', 'A picorer', 'Desserts', 'Sauce/Marinade/Condiments']
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT id, nom FROM Recettes ORDER BY nom')
@@ -186,7 +191,8 @@ def modifier_recette(recette_id):
         except Exception as e:
             flash(f"Erreur : {e}", "danger")
 
-    categories = ['ENTREES', 'PLATS', 'DESSERTS', 'BOULANGERIE', 'DIVERS']
+    # Liste des catégories mise à jour pour le formulaire de modification
+    categories = ['Entrées/Plat', 'A picorer', 'Desserts', 'Sauce/Marinade/Condiments']
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Recettes WHERE id=%s', (recette_id,))
