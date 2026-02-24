@@ -205,16 +205,32 @@ def rechercher_recette():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form.get('username') == "admin" and request.form.get('password') == "EmmaLiam29!":
-            session['logged_in'] = True
-            session.permanent = True
-            return redirect(url_for('index'))
-        flash('Identifiants incorrects', 'danger')
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    # Requête sécurisée pour vérifier l'utilisateur dans Supabase
+                    cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+                    user = cur.fetchone()
+            
+            if user:
+                session['logged_in'] = True
+                session.permanent = True
+                return redirect(url_for('index'))
+            else:
+                flash('Identifiants incorrects', 'danger')
+        except Exception as e:
+            # En cas d'erreur de base de données (ex: table users manquante)
+            print(f"Erreur login : {e}")
+            flash("Erreur technique lors de la connexion", 'danger')
+            
     return render_template('login.html')
 
 @app.before_request
 def check_login():
-    # EXCEPTION : On laisse passer 'ping' et 'login' sans être connecté
+    # Autorise 'ping', 'login' et les fichiers 'static' (CSS/Images) sans connexion
     if request.endpoint not in ['login', 'static', 'ping'] and not session.get('logged_in'):
         return redirect(url_for('login'))
 
