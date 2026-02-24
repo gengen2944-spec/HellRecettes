@@ -29,6 +29,24 @@ def get_db_connection():
         options="-c client_encoding=UTF8 -c prepare_threshold=0"
     )
 
+# --- NOUVELLE ROUTE : KEEP-ALIVE (UPTIME ROBOT) ---
+
+@app.route('/ping')
+def ping():
+    """Route pour empêcher la mise en veille de Render et Supabase"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Exécute une requête minimale pour simuler une activité SQL
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        return "Service Active & Database Connected", 200
+    except Exception as e:
+        print(f"Erreur lors du ping : {e}")
+        return f"Database Error: {e}", 500
+
+# --- SUITE DU CODE EXISTANT ---
+
 def recuperer_categories():
     try:
         with get_db_connection() as conn:
@@ -39,7 +57,7 @@ def recuperer_categories():
         print(f"Erreur catégories : {e}")
         return []
 
-# --- FONCTIONS UTILITAIRES ---
+# ... (Le reste de tes fonctions utilitaires reste inchangé)
 
 def get_ingredients(recette_id):
     with get_db_connection() as conn:
@@ -47,304 +65,15 @@ def get_ingredients(recette_id):
             cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (recette_id,))
             return cur.fetchall()
 
-def get_sous_recettes_disponibles():
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE est_sous_recette = TRUE ORDER BY nom')
-            return cur.fetchall()
-
-def get_sous_recettes_utilisees(recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('''SELECT r.* FROM Recettes r
-                           JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
-                           WHERE s.id_recette = %s''', (recette_id,))
-            return cur.fetchall()
-
-# --- LOGIQUE D'IMPRESSION MUTUALISÉE ---
-
-def ajouter_bloc_recette(cur, story, styles, data_recette, est_principal=True):
-    """Génère le contenu PDF pour une recette donnée (Principale ou Sous-recette)"""
-    titre_style = styles['Title'] if est_principal else styles['Heading1']
-    story.append(Paragraph(data_recette['nom'], titre_style))
-    story.append(Spacer(1, 12))
-    
-    if data_recette['description']:
-        story.append(Paragraph("Instructions :", styles['Heading2']))
-        # Nettoyage profond des sauts de ligne pour éviter les blocs écrasés
-        texte_propre = data_recette['description'].replace('\\r\\n', '\n').replace('\\n', '\n').replace('\r\n', '\n')
-        description_formatee = texte_propre.replace('\n', '<br/>')
-        story.append(Paragraph(description_formatee, styles['Normal']))
-        story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("Ingrédients :", styles['Heading2']))
-    cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
-    ingredients = cur.fetchall()
-    
-    for ing in ingredients:
-        q = ing['quantite'] if ing['quantite'] else ""
-        u = ing['unite'] if ing['unite'] else ""
-        story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-    
-    story.append(Spacer(1, 24))
-    if not est_principal:
-        story.append(Paragraph("<hr color='lightgrey' width='50%'/>", styles['Normal']))
-        story.append(Spacer(1, 24))
-
-# --- ROUTES PRINCIPALES ---
-
-@app.route('/')
-def index():
-    ordre_categories = recuperer_categories()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM recettes ORDER BY nom ASC')
-            toutes_les_recettes = cur.fetchall()
-
-    recettes_par_categorie = {cat: [] for cat in ordre_categories}
-    recettes_par_categorie['Divers'] = [] 
-
-    for r in toutes_les_recettes:
-        cat_recette = r['categorie'].strip() if r['categorie'] else ""
-        found = False
-        for cat_fixe in ordre_categories:
-            if cat_recette.lower() == cat_fixe.lower():
-                recettes_par_categorie[cat_fixe].append(r)
-                found = True
-                break
-        if not found:
-            recettes_par_categorie['Divers'].append(r)
-
-    categories_a_afficher = [c for c in ordre_categories if recettes_par_categorie[c]]
-    if recettes_par_categorie['Divers']:
-        categories_a_afficher.append('Divers')
-
-    return render_template('index.html', 
-                           recettes_par_categorie=recettes_par_categorie, 
-                           ordre_categories=categories_a_afficher,
-                           categories=ordre_categories)
-
-@app.route('/recette/<int:recette_id>')
-def afficher_recette(recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette = cur.fetchone()
-    if not recette:
-        return "Recette introuvable", 404
-    return render_template('recette.html', recette=recette, 
-                           ingredients=get_ingredients(recette_id), 
-                           sous_recettes=get_sous_recettes_utilisees(recette_id))
-
-@app.route('/ajout', methods=['GET', 'POST'])
-def ajouter_recette():
-    if request.method == 'POST':
-        est_sous = 'est_sous_recette' in request.form
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cur:
-                cur.execute("SELECT setval(pg_get_serial_sequence('recettes', 'id'), coalesce(max(id), 0) + 1, false) FROM recettes")
-                cur.execute('''INSERT INTO Recettes (nom, description, categorie, est_sous_recette) 
-                               VALUES (%s, %s, %s, %s) RETURNING id''', 
-                            (request.form.get('nom'), request.form.get('description'), 
-                             request.form.get('categorie'), est_sous))
-                recette_id = cur.fetchone()['id']
-                cur.execute("SELECT setval(pg_get_serial_sequence('ingredients', 'id'), coalesce(max(id), 0) + 1, false) FROM ingredients")
-                
-                for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
-                                   request.form.getlist('ingredient_quantite[]'), 
-                                   request.form.getlist('ingredient_unite[]')):
-                    if n.strip():
-                        try:
-                            q_val = float(q.replace(',', '.')) if q and q.strip() else None
-                        except ValueError:
-                            q_val = None
-                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q_val, u))
-                
-                for s_id in request.form.getlist('sous_recette_id[]'):
-                    if s_id:
-                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
-                conn.commit()
-            return redirect(url_for('index'))
-        except Exception as e:
-            if conn: conn.rollback()
-            return f"Erreur lors de l'ajout : {str(e)}"
-        finally:
-            if conn: conn.close()
-    return render_template('ajouter.html', categories=recuperer_categories(), sous_recettes=get_sous_recettes_disponibles())
-
-@app.route('/recette/<int:recette_id>/modifier', methods=['GET', 'POST'])
-def modifier_recette(recette_id):
-    if request.method == 'POST':
-        est_sous = 'est_sous_recette' in request.form
-        conn = None
-        try:
-            conn = get_db_connection()
-            with conn.cursor() as cur:
-                cur.execute('''UPDATE Recettes SET nom=%s, description=%s, categorie=%s, est_sous_recette=%s 
-                               WHERE id=%s''', (request.form.get('nom'), request.form.get('description'), 
-                                                request.form.get('categorie'), est_sous, recette_id))
-                cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-                for n, q, u in zip(request.form.getlist('ingredient_nom[]'), 
-                                   request.form.getlist('ingredient_quantite[]'), 
-                                   request.form.getlist('ingredient_unite[]')):
-                    if n.strip():
-                        try:
-                            q_val = float(q.replace(',', '.')) if q and q.strip() else None
-                        except ValueError:
-                            q_val = None
-                        cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q_val, u))
-                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s', (recette_id,))
-                for s_id in request.form.getlist('sous_recette_id[]'):
-                    if s_id:
-                        cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (recette_id, s_id))
-                conn.commit()
-            return redirect(url_for('afficher_recette', recette_id=recette_id))
-        except Exception as e:
-            if conn: conn.rollback()
-            return f"Erreur modification : {str(e)}"
-        finally:
-            if conn: conn.close()
-    
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette = cur.fetchone()
-    return render_template('modifier_recette.html', recette=recette, ingredients=get_ingredients(recette_id), 
-                           categories=recuperer_categories(), sous_recettes=get_sous_recettes_disponibles(), 
-                           sous_recettes_utilisees=get_sous_recettes_utilisees(recette_id))
-
-# --- ROUTES D'IMPRESSION PDF ---
-
-@app.route('/recette/<int:recette_id>/imprimer')
-def imprimer_recette(recette_id):
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            recette_principale = cur.fetchone()
-            cur.execute('''SELECT r.* FROM Recettes r
-                           JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
-                           WHERE s.id_recette = %s''', (recette_id,))
-            sous_recettes = cur.fetchall()
-
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            styles = getSampleStyleSheet()
-            story = []
-
-            ajouter_bloc_recette(cur, story, styles, recette_principale, est_principal=True)
-            for sr in sous_recettes:
-                ajouter_bloc_recette(cur, story, styles, sr, est_principal=False)
-            
-            doc.build(story)
-            buffer.seek(0)
-            nom_fichier = "".join([c if c.isalnum() else "_" for c in recette_principale['nom']])
-            # as_attachment=False permet l'ouverture dans l'onglet via target="_blank"
-            return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name=f"{nom_fichier}.pdf")
-
-@app.route('/imprimer-book', methods=['POST'])
-def imprimer_book():
-    ids_selectionnes = request.form.getlist('selection')
-    if not ids_selectionnes:
-        flash("Aucune recette sélectionnée", "warning")
-        return redirect(url_for('index'))
-
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    story = []
-    styles = getSampleStyleSheet()
-
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            for r_id in ids_selectionnes:
-                cur.execute('SELECT * FROM recettes WHERE id = %s', (r_id,))
-                recette = cur.fetchone()
-                if recette:
-                    cur.execute('''SELECT r.* FROM Recettes r
-                                   JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette
-                                   WHERE s.id_recette = %s''', (r_id,))
-                    sous_recettes = cur.fetchall()
-
-                    ajouter_bloc_recette(cur, story, styles, recette, est_principal=True)
-                    for sr in sous_recettes:
-                        ajouter_bloc_recette(cur, story, styles, sr, est_principal=False)
-                    story.append(PageBreak())
-
-    doc.build(story)
-    buffer.seek(0)
-    # as_attachment=False est crucial ici pour l'affichage direct
-    return send_file(buffer, mimetype='application/pdf', as_attachment=False, download_name="Mon_Livre_de_Recettes.pdf")
-
-# --- RECHERCHE ET GESTION ---
-
-@app.route('/recette/<int:recette_id>/supprimer', methods=['POST'])
-def supprimer_recette(recette_id):
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as cur:
-            cur.execute('DELETE FROM Ingredients WHERE id_recette = %s', (recette_id,))
-            cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette = %s OR id_sous_recette = %s', (recette_id, recette_id))
-            cur.execute('DELETE FROM Recettes WHERE id = %s', (recette_id,))
-            conn.commit()
-    except Exception as e:
-        if conn: conn.rollback()
-    finally:
-        if conn: conn.close()
-    return redirect(url_for('index'))
-
-@app.route('/recherche')
-def rechercher_recette():
-    terme = request.args.get('terme', '').strip()
-    type_recherche = request.args.get('type_recherche', 'nom')
-    categorie = request.args.get('categorie', '')
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            query = 'SELECT DISTINCT r.* FROM recettes r'
-            params = []
-            if type_recherche == 'ingredient':
-                query += ' JOIN Ingredients i ON r.id = i.id_recette'
-                condition_terme = "i.nom ILIKE %s"
-            else:
-                condition_terme = "r.nom ILIKE %s"
-            filters = []
-            if terme:
-                filters.append(condition_terme)
-                params.append(f'%{terme}%')
-            if categorie:
-                filters.append("r.categorie = %s")
-                params.append(categorie)
-            if filters:
-                query += " WHERE " + " AND ".join(filters)
-            query += " ORDER BY r.nom ASC"
-            cur.execute(query, tuple(params))
-            recettes = cur.fetchall()
-    return render_template('recherche.html', recettes=recettes, terme=terme, 
-                           type_recherche=type_recherche, categorie=categorie, categories=recuperer_categories())
-
-# --- AUTHENTIFICATION ---
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
-                user = cur.fetchone()
-        if user:
-            session['logged_in'] = True
-            session.permanent = True 
-            return redirect(url_for('index'))
-        flash('Identifiants incorrects', 'danger')
-    return render_template('login.html')
+# ... (Gardez toutes les autres fonctions et routes telles quelles jusqu'à check_login)
 
 @app.before_request
 def check_login():
-    if request.endpoint not in ['login', 'static'] and not session.get('logged_in'):
+    # AJOUT DE 'ping' à la liste des exceptions pour permettre à UptimeRobot d'y accéder sans login
+    if request.endpoint not in ['login', 'static', 'ping'] and not session.get('logged_in'):
         return redirect(url_for('login'))
+
+# ... (Fin du fichier avec logout et le bloc if __name__ == '__main__':)
 
 @app.route('/logout')
 def logout():
