@@ -152,7 +152,7 @@ def ajouter_recette():
     categories = ['Entrées/Plat', 'A picorer', 'Desserts', 'Sauce/Marinade/Condiments']
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT id, nom FROM Recettes ORDER BY nom')
+            cur.execute('SELECT id, nom FROM Recettes WHERE est_sous_recette = True ORDER BY nom')
             sous_recettes = cur.fetchall()
     return render_template('ajouter.html', categories=categories, sous_recettes=sous_recettes)
 
@@ -203,7 +203,7 @@ def modifier_recette(recette_id):
                            JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette 
                            WHERE s.id_recette = %s''', (recette_id,))
             sous_recettes_utilisees = cur.fetchall()
-            cur.execute('SELECT id, nom FROM Recettes WHERE id != %s ORDER BY nom', (recette_id,))
+            cur.execute('SELECT id, nom FROM Recettes WHERE id != %s AND est_sous_recette = True ORDER BY nom', (recette_id,))
             sous_recettes = cur.fetchall()
             
     return render_template('modifier_recette.html', recette=recette, ingredients=ingredients, 
