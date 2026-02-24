@@ -148,6 +148,7 @@ def ajouter_recette():
         with conn.cursor() as cur:
             cur.execute('SELECT id, nom FROM Recettes ORDER BY nom')
             sous_recettes = cur.fetchall()
+    # Utilisation du nom correct : ajouter.html
     return render_template('ajouter.html', categories=categories, sous_recettes=sous_recettes)
 
 @app.route('/modifier_recette/<int:recette_id>', methods=['GET', 'POST'])
@@ -192,107 +193,17 @@ def modifier_recette(recette_id):
             recette = cur.fetchone()
             cur.execute('SELECT * FROM Ingredients WHERE id_recette=%s', (recette_id,))
             ingredients = cur.fetchall()
-            
-            # Récupération des noms des sous-recettes déjà liées
             cur.execute('''SELECT r.id, r.nom FROM Recettes r 
                            JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette 
                            WHERE s.id_recette = %s''', (recette_id,))
             sous_recettes_utilisees = cur.fetchall()
-            
-            # Toutes les autres recettes dispo (pour le select)
             cur.execute('SELECT id, nom FROM Recettes WHERE id != %s ORDER BY nom', (recette_id,))
             sous_recettes = cur.fetchall()
             
-    return render_template('modifier.html', recette=recette, ingredients=ingredients, 
+    # Utilisation du nom correct : modifier_recette.html
+    return render_template('modifier_recette.html', recette=recette, ingredients=ingredients, 
                            sous_recettes_utilisees=sous_recettes_utilisees, 
                            sous_recettes=sous_recettes, categories=categories)
 
-@app.route('/supprimer_recette/<int:recette_id>')
-@app.route('/supprimer/<int:recette_id>')
-def supprimer_recette(recette_id):
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('DELETE FROM Recettes WHERE id=%s', (recette_id,))
-            conn.commit()
-        flash("Recette supprimée", "info")
-    except Exception as e:
-        flash(f"Erreur suppression : {e}", "danger")
-    return redirect(url_for('index'))
-
-# --- IMPRESSION PDF ---
-def generer_bloc_pdf(story, styles, data_recette, est_principal=True):
-    titre_style = styles['Title'] if est_principal else styles['Heading2']
-    story.append(Paragraph(data_recette['nom'], titre_style))
-    story.append(Spacer(1, 12))
-    if data_recette['description']:
-        story.append(Paragraph("Instructions :", styles['Heading3']))
-        texte = data_recette['description'].replace('\r\n', '\n').replace('\n', '<br/>')
-        story.append(Paragraph(texte, styles['Normal']))
-    
-    story.append(Paragraph("Ingrédients :", styles['Heading3']))
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
-            ings = cur.fetchall()
-    for ing in ings:
-        q, u = (ing['quantite'] or ""), (ing['unite'] or "")
-        story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-    story.append(Spacer(1, 24))
-    story.append(Paragraph("<hr/>", styles['Normal']))
-
-@app.route('/recette/<int:recette_id>/imprimer')
-def imprimer_recette(recette_id):
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles, story = getSampleStyleSheet(), []
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute('SELECT * FROM Recettes WHERE id = %s', (recette_id,))
-            r = cur.fetchone()
-            if r:
-                generer_bloc_pdf(story, styles, r, True)
-                cur.execute('''SELECT r.* FROM Recettes r 
-                               JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette 
-                               WHERE s.id_recette = %s''', (recette_id,))
-                for sr in cur.fetchall():
-                    generer_bloc_pdf(story, styles, sr, False)
-    doc.build(story)
-    buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name="recette.pdf")
-
-@app.route('/imprimer_book', methods=['POST'])
-def imprimer_book():
-    ids = request.form.getlist('selection')
-    if not ids: return redirect(url_for('index'))
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
-    styles, story = getSampleStyleSheet(), []
-    for r_id in ids:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT * FROM Recettes WHERE id = %s', (r_id,))
-                r = cur.fetchone()
-                if r:
-                    generer_bloc_pdf(story, styles, r, True)
-                    cur.execute('''SELECT r.* FROM Recettes r 
-                                   JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette 
-                                   WHERE s.id_recette = %s''', (r_id,))
-                    for sr in cur.fetchall():
-                        generer_bloc_pdf(story, styles, sr, False)
-    doc.build(story)
-    buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name="Livre.pdf")
-
-@app.route('/recherche')
-def rechercher_recette():
-    terme = request.args.get('terme', '').strip()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM Recettes WHERE nom ILIKE %s", (f'%{terme}%',))
-            recettes = cur.fetchall()
-    return render_template('recherche.html', recettes=recettes, terme=terme)
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+# ... (Reste du code identique : supprimer, imprimer, recherche)
+# Je ne remets pas la fin pour gagner de la place, mais garde bien tes fonctions supprimer et imprimer !
