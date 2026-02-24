@@ -206,18 +206,26 @@ def supprimer_recette(recette_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # 1. On supprime d'abord les liaisons où cette recette est une sous-recette
-                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_sous_recette=%s OR id_recette=%s', (recette_id, recette_id))
+                # 1. VERIFICATION : Est-ce que cette recette est utilisée ailleurs ?
+                cur.execute('''SELECT COUNT(*) FROM SousRecettesUtilisees 
+                               WHERE id_sous_recette = %s''', (recette_id,))
+                usage_count = cur.fetchone()['count']
                 
-                # 2. On supprime les ingrédients
+                if usage_count > 0:
+                    flash(f"Impossible de supprimer : cette recette est utilisée comme sous-recette dans {usage_count} autre(s) plat(s).", "danger")
+                    return redirect(url_for('afficher_recette', recette_id=recette_id))
+
+                # 2. Si on arrive ici, c'est que la recette n'est pas utilisée.
+                # On nettoie ses propres dépendances (ses ingrédients et les sous-recettes QU'ELLE utilise)
+                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette=%s', (recette_id,))
                 cur.execute('DELETE FROM Ingredients WHERE id_recette=%s', (recette_id,))
                 
-                # 3. Enfin on supprime la recette
+                # 3. Suppression finale de la recette
                 cur.execute('DELETE FROM Recettes WHERE id=%s', (recette_id,))
             conn.commit()
         flash("Recette supprimée avec succès", "info")
     except Exception as e:
-        flash(f"Erreur suppression : {e}", "danger")
+        flash(f"Erreur technique lors de la suppression : {e}", "danger")
     return redirect(url_for('index'))
 
 # --- IMPRESSION PDF ---
