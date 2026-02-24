@@ -113,8 +113,8 @@ def afficher_recette(recette_id):
 
 # --- GESTION DES RECETTES (CRUD) ---
 
-@app.route('/ajouter', methods=['GET', 'POST'])
-def ajouter_recette():  # <-- Nommé pour correspondre à url_for('ajouter_recette')
+@app.route('/ajouter_recette', methods=['GET', 'POST'])
+def ajouter_recette():
     if request.method == 'POST':
         nom = request.form.get('nom')
         categorie = request.form.get('categorie')
@@ -150,8 +150,8 @@ def ajouter_recette():  # <-- Nommé pour correspondre à url_for('ajouter_recet
             toutes_recettes = cur.fetchall()
     return render_template('ajouter.html', toutes_recettes=toutes_recettes)
 
-@app.route('/modifier/<int:recette_id>', methods=['GET', 'POST'])
-def modifier_recette(recette_id):  # <-- Nommé pour correspondre à url_for('modifier_recette')
+@app.route('/modifier_recette/<int:recette_id>', methods=['GET', 'POST'])
+def modifier_recette(recette_id):
     if request.method == 'POST':
         nom = request.form.get('nom')
         categorie = request.form.get('categorie')
@@ -195,7 +195,7 @@ def modifier_recette(recette_id):  # <-- Nommé pour correspondre à url_for('mo
     return render_template('modifier.html', recette=recette, ingredients=ingredients, 
                            mes_sous_recettes=mes_sous_recettes, toutes_recettes=toutes_recettes)
 
-@app.route('/supprimer/<int:recette_id>')
+@app.route('/supprimer_recette/<int:recette_id>')
 def supprimer_recette(recette_id):
     try:
         with get_db_connection() as conn:
