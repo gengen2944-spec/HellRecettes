@@ -110,6 +110,7 @@ def afficher_recette(recette_id):
 
 @app.route('/ajouter_recette', methods=['GET', 'POST'])
 @app.route('/ajouter', methods=['GET', 'POST'])
+@app.route('/ajout', methods=['GET', 'POST'])  # <-- On rajoute celle-ci pour corriger le lien 404
 def ajouter_recette():
     if request.method == 'POST':
         nom = request.form.get('nom')
