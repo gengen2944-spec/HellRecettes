@@ -200,14 +200,22 @@ def modifier_recette(recette_id):
                            sous_recettes_utilisees=sous_recettes_utilisees, 
                            sous_recettes=sous_recettes, categories=CATEGORIES_LISTE)
 
-@app.route('/supprimer_recette/<int:recette_id>')
+@app.route('/supprimer_recette/<int:recette_id>', methods=['GET', 'POST'])
+@app.route('/supprimer/<int:recette_id>', methods=['GET', 'POST'])
 def supprimer_recette(recette_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # 1. On supprime d'abord les liaisons où cette recette est une sous-recette
+                cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_sous_recette=%s OR id_recette=%s', (recette_id, recette_id))
+                
+                # 2. On supprime les ingrédients
+                cur.execute('DELETE FROM Ingredients WHERE id_recette=%s', (recette_id,))
+                
+                # 3. Enfin on supprime la recette
                 cur.execute('DELETE FROM Recettes WHERE id=%s', (recette_id,))
             conn.commit()
-        flash("Recette supprimée", "info")
+        flash("Recette supprimée avec succès", "info")
     except Exception as e:
         flash(f"Erreur suppression : {e}", "danger")
     return redirect(url_for('index'))
