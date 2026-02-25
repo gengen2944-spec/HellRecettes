@@ -4,9 +4,12 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from io import BytesIO
+
+# Imports ReportLab mis à jour pour les cadres, le sommaire et la pagination
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -17,7 +20,7 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Liste globale des catégories pour assurer la synchronisation partout
+# Liste globale des catégories
 CATEGORIES_LISTE = ['Entrées/Plat', 'A picorer', 'Desserts', 'Sauce/Marinade/Condiments']
 
 # --- DB CONNECTION ---
@@ -85,10 +88,8 @@ def index():
                 recettes = cur.fetchall()
         
         recettes_par_categorie = {}
-        cats_base = set()
         for r in recettes:
             cat = r['categorie'] or "DIVERS"
-            cats_base.add(cat)
             recettes_par_categorie.setdefault(cat, []).append(r)
             
         return render_template('index.html', 
@@ -138,7 +139,7 @@ def ajouter_recette():
                     for n, q, u in zip(noms_ing, quants_ing, unites_ing):
                         if n.strip():
                             nom_ing_propre = n.strip().capitalize()
-                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (new_id, n, q, u))
+                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (new_id, nom_ing_propre, q, u))
                     for sr_id in sr_ids:
                         if sr_id:
                             cur.execute('INSERT INTO SousRecettesUtilisees (id_recette, id_sous_recette) VALUES (%s, %s)', (new_id, sr_id))
@@ -176,7 +177,7 @@ def modifier_recette(recette_id):
                     for n, q, u in zip(noms_ing, quants_ing, unites_ing):
                         if n.strip():
                             nom_ing_propre = n.strip().capitalize()
-                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q, u))
+                            cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, nom_ing_propre, q, u))
                     cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette=%s', (recette_id,))
                     for sr_id in sr_ids:
                         if sr_id:
@@ -208,21 +209,15 @@ def supprimer_recette(recette_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # 1. VERIFICATION : Est-ce que cette recette est utilisée ailleurs ?
-                cur.execute('''SELECT COUNT(*) FROM SousRecettesUtilisees 
-                               WHERE id_sous_recette = %s''', (recette_id,))
+                cur.execute('SELECT COUNT(*) FROM SousRecettesUtilisees WHERE id_sous_recette = %s', (recette_id,))
                 usage_count = cur.fetchone()['count']
                 
                 if usage_count > 0:
                     flash(f"Impossible de supprimer : cette recette est utilisée comme sous-recette dans {usage_count} autre(s) plat(s).", "danger")
                     return redirect(url_for('afficher_recette', recette_id=recette_id))
 
-                # 2. Si on arrive ici, c'est que la recette n'est pas utilisée.
-                # On nettoie ses propres dépendances (ses ingrédients et les sous-recettes QU'ELLE utilise)
                 cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette=%s', (recette_id,))
                 cur.execute('DELETE FROM Ingredients WHERE id_recette=%s', (recette_id,))
-                
-                # 3. Suppression finale de la recette
                 cur.execute('DELETE FROM Recettes WHERE id=%s', (recette_id,))
             conn.commit()
         flash("Recette supprimée avec succès", "info")
@@ -230,25 +225,53 @@ def supprimer_recette(recette_id):
         flash(f"Erreur technique lors de la suppression : {e}", "danger")
     return redirect(url_for('index'))
 
-# --- IMPRESSION PDF ---
+# --- IMPRESSION PDF (FONCTIONS AMÉLIORÉES) ---
+
+def numeroter_pages(canvas, doc):
+    canvas.saveState()
+    canvas.setFont('Helvetica', 9)
+    canvas.drawCentredString(letter[0]/2, 20, f"Page {doc.pageCounter}")
+    canvas.restoreState()
+
 def generer_bloc_pdf(story, styles, data_recette, est_principal=True):
-    titre_style = styles['Title'] if est_principal else styles['Heading2']
-    story.append(Paragraph(data_recette['nom'], titre_style))
+    # Création d'un cadre (Tableau) pour le titre
+    bg_color = colors.whitesmoke if est_principal else colors.white
+    border_width = 1.2 if est_principal else 0.5
+    
+    style_titre = styles['Title'] if est_principal else styles['Heading2']
+    p_titre = Paragraph(f"<b>{data_recette['nom']}</b>", style_titre)
+    
+    tab_titre = Table([[p_titre]], colWidths=[460])
+    tab_titre.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), bg_color),
+        ('BORDER', (0, 0), (-1, -1), border_width, colors.black),
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ('LEFTPADDING', (0, 0), (-1, -1), 15),
+    ]))
+    
+    story.append(tab_titre)
     story.append(Spacer(1, 12))
+    
     if data_recette['description']:
-        story.append(Paragraph("Instructions :", styles['Heading3']))
+        story.append(Paragraph("<i>Instructions :</i>", styles['Heading3']))
         texte = data_recette['description'].replace('\r\n', '\n').replace('\n', '<br/>')
         story.append(Paragraph(texte, styles['Normal']))
-    story.append(Paragraph("Ingrédients :", styles['Heading3']))
+        story.append(Spacer(1, 8))
+
+    story.append(Paragraph("<i>Ingrédients :</i>", styles['Heading3']))
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute('SELECT * FROM Ingredients WHERE id_recette = %s', (data_recette['id'],))
             ings = cur.fetchall()
     for ing in ings:
         q, u = (ing['quantite'] or ""), (ing['unite'] or "")
-        story.append(Paragraph(f"• {q} {u} {ing['nom']}", styles['Normal']))
-    story.append(Spacer(1, 24))
-    story.append(Paragraph("<hr/>", styles['Normal']))
+        story.append(Paragraph(f"&bull; {q} {u} {ing['nom']}", styles['Normal']))
+    
+    story.append(Spacer(1, 20))
+    if not est_principal:
+        story.append(Paragraph("<hr color='lightgrey' width='50%'/>", styles['Normal']))
+        story.append(Spacer(1, 10))
 
 @app.route('/recette/<int:recette_id>/imprimer')
 def imprimer_recette(recette_id):
@@ -266,30 +289,56 @@ def imprimer_recette(recette_id):
                     generer_bloc_pdf(story, styles, sr, False)
     doc.build(story)
     buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name="recette.pdf")
+    return send_file(buffer, mimetype='application/pdf', download_name=f"{r['nom']}.pdf")
 
 @app.route('/imprimer_book', methods=['POST'])
 def imprimer_book():
     ids = request.form.getlist('selection')
     if not ids: return redirect(url_for('index'))
+    
+    recettes_a_imprimer = []
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for r_id in ids:
+                cur.execute('SELECT * FROM Recettes WHERE id = %s', (r_id,))
+                r = cur.fetchone()
+                if r: recettes_a_imprimer.append(r)
+    
+    # Tri par catégorie (ordre de CATEGORIES_LISTE) puis par nom
+    recettes_a_imprimer.sort(key=lambda x: (CATEGORIES_LISTE.index(x['categorie']) if x['categorie'] in CATEGORIES_LISTE else 99, x['nom']))
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles, story = getSampleStyleSheet(), []
-    for r_id in ids:
+
+    # --- SOMMAIRE ---
+    story.append(Paragraph("Sommaire du Livre de Recettes", styles['Title']))
+    story.append(Spacer(1, 20))
+    current_cat = None
+    for r in recettes_a_imprimer:
+        if r['categorie'] != current_cat:
+            current_cat = r['categorie']
+            story.append(Spacer(1, 10))
+            story.append(Paragraph(f"<b>{current_cat}</b>", styles['Heading2']))
+        story.append(Paragraph(f"&bull; {r['nom']}", styles['Normal']))
+    
+    story.append(PageBreak())
+
+    # --- CORPS DU LIVRE ---
+    for r in recettes_a_imprimer:
+        generer_bloc_pdf(story, styles, r, True)
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT * FROM Recettes WHERE id = %s', (r_id,))
-                r = cur.fetchone()
-                if r:
-                    generer_bloc_pdf(story, styles, r, True)
-                    cur.execute('''SELECT r.* FROM Recettes r JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette WHERE s.id_recette = %s''', (r_id,))
-                    for sr in cur.fetchall():
-                        generer_bloc_pdf(story, styles, sr, False)
-    doc.build(story)
-    buffer.seek(0)
-    return send_file(buffer, mimetype='application/pdf', download_name="Livre.pdf")
+                cur.execute('''SELECT r.* FROM Recettes r JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette WHERE s.id_recette = %s''', (r['id'],))
+                for sr in cur.fetchall():
+                    generer_bloc_pdf(story, styles, sr, False)
+        story.append(PageBreak())
 
-# --- RECHERCHE AVANCÉE ---
+    doc.build(story, onFirstPage=numeroter_pages, onLaterPages=numeroter_pages)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', download_name="Livre_Hell_Recettes.pdf")
+
+# --- RECHERCHE AVANCÉE (MISE À JOUR) ---
 @app.route('/recherche')
 def rechercher_recette():
     terme = request.args.get('terme', '').strip()
@@ -300,6 +349,7 @@ def rechercher_recette():
     if terme or cat_filtre:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                # On cherche à la fois dans le nom et les sous-recettes si c'est le type choisi
                 sql = "SELECT DISTINCT r.* FROM Recettes r"
                 params = []
                 
@@ -309,8 +359,8 @@ def rechercher_recette():
                 elif type_recherche == 'sous_recette':
                     sql += " LEFT JOIN SousRecettesUtilisees sru ON r.id = sru.id_recette"
                     sql += " LEFT JOIN Recettes sr ON sru.id_sous_recette = sr.id"
-                    sql += " WHERE sr.nom ILIKE %s"
-                    params.append(f'%{terme}%')
+                    sql += " WHERE (sr.nom ILIKE %s OR r.nom ILIKE %s)" # Recherche hybride
+                    params.extend([f'%{terme}%', f'%{terme}%'])
                 else:
                     sql += " WHERE r.nom ILIKE %s"
                     params.append(f'%{terme}%')
