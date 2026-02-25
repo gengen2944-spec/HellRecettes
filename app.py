@@ -230,7 +230,8 @@ def supprimer_recette(recette_id):
 def numeroter_pages(canvas, doc):
     canvas.saveState()
     canvas.setFont('Helvetica', 9)
-    canvas.drawCentredString(letter[0]/2, 20, f"Page {doc.pageCounter}")
+    # On utilise doc.page à la place de doc.pageCounter
+    canvas.drawCentredString(letter[0]/2, 20, f"Page {doc.page}")
     canvas.restoreState()
 
 def generer_bloc_pdf(story, styles, data_recette, est_principal=True):
