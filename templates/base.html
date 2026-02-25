@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hell Recettes</title>
     <style>
-        /* ... (Tout ton style actuel reste identique) ... */
         body {
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -13,11 +12,15 @@
             color: #333;
         }
 
+        /* --- MODIFICATION : HEADER FIGÉ --- */
         header {
             background-color: #ffffff;
-            padding: 20px 0;
+            padding: 15px 0; /* Un peu plus compact pour le mode figé */
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 40px;
+            
+            position: sticky;   /* Fige le bandeau */
+            top: 0;            /* Le colle tout en haut */
+            z-index: 1000;     /* Le place au-dessus du contenu qui défile */
         }
 
         .header-container {
@@ -30,14 +33,15 @@
         }
 
         .logo-wrapper { text-decoration: none; display: flex; align-items: center; gap: 15px; }
+        
         .fire-icon {
-            background: #fff0f0; width: 50px; height: 50px;
+            background: #fff0f0; width: 45px; height: 45px; /* Légèrement réduit */
             display: flex; align-items: center; justify-content: center;
-            border-radius: 12px; font-size: 1.8rem;
+            border-radius: 12px; font-size: 1.6rem;
             box-shadow: 0 4px 8px rgba(229, 57, 53, 0.15);
         }
 
-        .site-title { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }
+        .site-title { margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.5px; }
         .text-hell { color: #e53935; }
         .text-recettes { color: #2d3436; }
 
@@ -53,7 +57,12 @@
         .btn-logout { background-color: #e53935; }
         .btn-logout:hover { background-color: #c62828; transform: translateY(-2px); }
 
-        main { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+        /* --- MODIFICATION : MARGE DU CONTENU --- */
+        main { 
+            max-width: 1100px; 
+            margin: 0 auto; 
+            padding: 30px 20px; /* On ajoute 30px en haut pour décoller du header figé */
+        }
 
         /* --- STYLE DES MESSAGES FLASH --- */
         .flash-container {
@@ -78,7 +87,6 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* ... (Reste de tes styles de formulaires) ... */
         .form-input-custom, .form-textarea-custom {
             width: 100%; padding: 14px; border: 1px solid #ced4da;
             border-radius: 10px; font-family: inherit; font-size: 1.1rem;
