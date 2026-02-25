@@ -118,7 +118,7 @@ def afficher_recette(recette_id):
 @app.route('/ajout', methods=['GET', 'POST'])
 def ajouter_recette():
     if request.method == 'POST':
-        nom = request.form.get('nom')
+        nom = request.form.get('nom').strip().capitalize()
         categorie = request.form.get('categorie')
         description = request.form.get('description')
         est_sous_recette = True if request.form.get('est_sous_recette') else False
@@ -137,6 +137,7 @@ def ajouter_recette():
                     new_id = cur.fetchone()['id']
                     for n, q, u in zip(noms_ing, quants_ing, unites_ing):
                         if n.strip():
+                            nom_ing_propre = n.strip().capitalize()
                             cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (new_id, n, q, u))
                     for sr_id in sr_ids:
                         if sr_id:
@@ -157,7 +158,7 @@ def ajouter_recette():
 @app.route('/modifier/<int:recette_id>', methods=['GET', 'POST'])
 def modifier_recette(recette_id):
     if request.method == 'POST':
-        nom = request.form.get('nom')
+        nom = request.form.get('nom').strip().capitalize()
         categorie = request.form.get('categorie')
         description = request.form.get('description')
         est_sous_recette = True if request.form.get('est_sous_recette') else False
@@ -174,6 +175,7 @@ def modifier_recette(recette_id):
                     cur.execute('DELETE FROM Ingredients WHERE id_recette=%s', (recette_id,))
                     for n, q, u in zip(noms_ing, quants_ing, unites_ing):
                         if n.strip():
+                            nom_ing_propre = n.strip().capitalize()
                             cur.execute('INSERT INTO Ingredients (id_recette, nom, quantite, unite) VALUES (%s, %s, %s, %s)', (recette_id, n, q, u))
                     cur.execute('DELETE FROM SousRecettesUtilisees WHERE id_recette=%s', (recette_id,))
                     for sr_id in sr_ids:
