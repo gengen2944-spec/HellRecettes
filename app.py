@@ -8,7 +8,7 @@ from io import BytesIO
 # Imports ReportLab mis à jour pour les cadres, le sommaire et la pagination
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, CondPageBreak
 from reportlab.lib import colors
 
 # --- CONFIGURATION ---
@@ -324,18 +324,35 @@ def imprimer_book():
         story.append(Paragraph(f"&bull; {r['nom']}", styles['Normal']))
     
     story.append(PageBreak())
-
-    # --- CORPS DU LIVRE ---
+# --- CORPS DU LIVRE ---
+    # Cette boucle parcourt chaque recette sélectionnée et triée
     for r in recettes_a_imprimer:
+        # CondPageBreak(600) : Saute à la page suivante SEULEMENT s'il reste 
+        # moins de 600 points (environ 80% de la page). 
+        # Cela évite de créer une page blanche si on est déjà en haut d'une page neuve.
+        story.append(CondPageBreak(600)) 
+        
+        # 1. Générer le bloc de la recette principale (avec le grand cadre grisé)
         generer_bloc_pdf(story, styles, r, True)
+        
+        # 2. Chercher et générer les sous-recettes associées
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('''SELECT r.* FROM Recettes r JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette WHERE s.id_recette = %s''', (r['id'],))
-                for sr in cur.fetchall():
+                cur.execute('''SELECT r.* FROM Recettes r 
+                               JOIN SousRecettesUtilisees s ON r.id = s.id_sous_recette 
+                               WHERE s.id_recette = %s''', (r['id'],))
+                sous_recettes = cur.fetchall()
+                
+                for sr in sous_recettes:
+                    # On ajoute un petit espace avant la sous-recette
+                    story.append(Spacer(1, 5))
+                    # On génère le bloc (cadre plus fin, pas de fond grisé)
                     generer_bloc_pdf(story, styles, sr, False)
-        story.append(PageBreak())
 
+    # --- GÉNÉRATION FINALE ---
+    # On utilise doc.page (et non pageCounter) pour éviter l'erreur AttributeError
     doc.build(story, onFirstPage=numeroter_pages, onLaterPages=numeroter_pages)
+    
     buffer.seek(0)
     return send_file(buffer, mimetype='application/pdf', download_name="Livre_Hell_Recettes.pdf")
 
