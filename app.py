@@ -35,12 +35,13 @@ def get_db_connection():
 # --- SÉCURITÉ ---
 @app.before_request
 def check_login():
-    exempt_routes = ['login', 'static', 'ping']
+    exempt_routes = ['login', 'static', 'ping', 'keepalive']
     if request.endpoint in exempt_routes:
         return None
     if not session.get('logged_in'):
         return redirect(url_for('login'))
 
+#------route pour maintenir render actif---------
 @app.route('/ping')
 def ping():
     try:
@@ -50,6 +51,18 @@ def ping():
         return "Service Active", 200
     except Exception as e:
         return f"Error: {e}", 500
+        
+#------route pour maintenir supabase actif---------
+@app.route('/keepalive')
+def keepalive():
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM Recettes")
+                count = cur.fetchone()['count']
+        return f"OK - {count} recettes", 200
+    except Exception as e:
+        return f"Erreur: {e}", 500
 
 # --- AUTHENTIFICATION ---
 @app.route('/login', methods=['GET', 'POST'])
