@@ -1,0 +1,23 @@
+name: Keep Alive - Supabase
+
+on:
+  schedule:
+    # Lundi et jeudi à 8h00 UTC (10h heure française)
+    - cron: '0 8 * * 1,4'
+  workflow_dispatch: # Permet de lancer manuellement depuis GitHub
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase via route /keepalive
+        run: |
+          echo "🔔 Démarrage du ping Supabase..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://hellrecettes.onrender.com/keepalive)
+          echo "Code HTTP reçu : $RESPONSE"
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "❌ Échec du ping (code $RESPONSE)"
+            exit 1
+          fi
+          echo "✅ Supabase est actif !"
