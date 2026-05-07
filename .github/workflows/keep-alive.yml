@@ -1,23 +1,31 @@
-name: Keep Alive - Supabase
+name: Keep Alive - HellRecettes
 
 on:
   schedule:
-    # Lundi et jeudi à 8h00 UTC (10h heure française)
-    - cron: '0 8 * * 1,4'
-  workflow_dispatch: # Permet de lancer manuellement depuis GitHub
+    - cron: '0 8 * * *'   # Tous les jours à 8h UTC
+    - cron: '0 20 * * *'  # Tous les jours à 20h UTC
+  workflow_dispatch:       # Permet de lancer manuellement depuis GitHub
 
 jobs:
-  keepalive:
+  keep-alive:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping Supabase via route /keepalive
+      - name: 1 - Ping Render (réveil du serveur)
         run: |
-          echo "🔔 Démarrage du ping Supabase..."
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://hellrecettes.onrender.com/keepalive)
-          echo "Code HTTP reçu : $RESPONSE"
-          if [ "$RESPONSE" -ne 200 ]; then
-            echo "❌ Échec du ping (code $RESPONSE)"
-            exit 1
-          fi
-          echo "✅ Supabase est actif !"
+          echo "→ Ping Render..."
+          curl -sf ${{ secrets.APP_URL }}/ping
+          echo " OK"
+
+      - name: 2 - Warmup Supabase (4 requêtes SQL)
+        run: |
+          echo "→ Warmup Supabase..."
+          curl -sf ${{ secrets.APP_URL }}/warmup
+          echo " OK"
+
+      - name: 3 - Pause 10s puis second ping
+        run: |
+          sleep 10
+          echo "→ Second ping..."
+          curl -sf ${{ secrets.APP_URL }}/ping
+          echo " OK"
