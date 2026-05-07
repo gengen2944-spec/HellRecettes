@@ -1,3 +1,10 @@
+#
+#
+#  Version 2.0
+#   07/05/2026  ajout de la route Warmup pour generation de trafic
+#
+#
+#
 import os
 from datetime import timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
@@ -35,7 +42,7 @@ def get_db_connection():
 # --- SÉCURITÉ ---
 @app.before_request
 def check_login():
-    exempt_routes = ['login', 'static', 'ping', 'keepalive']
+    exempt_routes = ['login', 'static', 'ping', 'keepalive', 'warmup']
     if request.endpoint in exempt_routes:
         return None
     if not session.get('logged_in'):
@@ -51,6 +58,25 @@ def ping():
         return "Service Active", 200
     except Exception as e:
         return f"Error: {e}", 500
+
+#-------route pour generer du trafic pour supabase-----------en plus keepalive
+@app.route('/warmup')
+def warmup():
+    try:
+        results = {}
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM Recettes")
+                results['recettes'] = cur.fetchone()['count']
+                cur.execute("SELECT COUNT(*) FROM Ingredients")
+                results['ingredients'] = cur.fetchone()['count']
+                cur.execute("SELECT COUNT(*) FROM SousRecettesUtilisees")
+                results['sous_recettes'] = cur.fetchone()['count']
+                cur.execute("SELECT id, nom FROM Recettes ORDER BY id DESC LIMIT 5")
+                results['dernières'] = [r['nom'] for r in cur.fetchall()]
+        return {"status": "ok", "timestamp": str(__import__('datetime').datetime.now()), "data": results}, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
         
 #------route pour maintenir supabase actif---------
 @app.route('/keepalive')
