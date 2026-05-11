@@ -51,13 +51,17 @@ def check_login():
 #------route pour maintenir render actif---------
 @app.route('/ping')
 def ping():
+    return "OK", 200
+
+@app.route('/healthz')
+def healthz():
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-        return "Service Active", 200
+        return "DB OK", 200
     except Exception as e:
-        return f"Error: {e}", 500
+        return f"DB Error: {e}", 500
 
 #-------route pour generer du trafic pour supabase-----------en plus keepalive
 @app.route('/warmup')
