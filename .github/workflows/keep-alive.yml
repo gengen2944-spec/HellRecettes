@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 0 - Checkout
+        uses: actions/checkout@v3
+
       - name: 1 - Ping Render (réveil du serveur)
         run: |
           echo "→ Ping Render..."
@@ -29,3 +32,10 @@ jobs:
           echo "→ Second ping..."
           curl -sf ${{ secrets.APP_URL }}/ping
           echo " OK"
+
+      - name: 4 - Bump repo activity (évite la mise en pause GitHub Actions)
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git commit --allow-empty -m "keep-alive bump"
+          git push
