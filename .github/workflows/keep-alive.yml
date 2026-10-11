@@ -29,3 +29,10 @@ jobs:
           echo "→ Second ping..."
           curl -sf --max-time 60 ${{ secrets.APP_URL }}/ping
           echo " OK"
+
+      - name: 4 - Bump repo activity
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git commit --allow-empty -m "keep-alive bump"
+          git push
