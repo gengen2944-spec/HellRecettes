@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 0 - Checkout
+        uses: actions/checkout@v4
+
       - name: 1 - Ping Render (réveil du serveur)
         run: |
           echo "→ Ping Render..."
